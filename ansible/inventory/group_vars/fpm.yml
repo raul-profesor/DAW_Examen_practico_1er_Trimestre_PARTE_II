@@ -1,0 +1,7 @@
+---
+# ---------------------------------------------------------------------------
+# Variables especificas del grupo "fpm" (la maquina con PHP-FPM)
+#
+# El resto de variables (app_root, php_fpm_listen, deploy_scenario...) son
+# comunes y estan definidas en group_vars/all.yml.
+# ---------------------------------------------------------------------------

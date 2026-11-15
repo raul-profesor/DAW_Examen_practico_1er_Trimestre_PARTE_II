@@ -1,0 +1,80 @@
+---
+# ---------------------------------------------------------------------------
+# Rol nginx: instala, configura el virtual host y valida la sintaxis.
+#
+# La variable `fastcgi_socket_version` decide que version de PHP aparece en
+# la directiva fastcgi_pass:
+#
+#   - Escenarios v1/v2 : "8.3" (la version realmente instalada) -> correcto.
+#   - Escenario v3     : el fastcgi_pass apunta al puerto equivocado
+#                        (fpm_fastcgi_wrong_port = 9001) -> 502.
+#
+# El rol lee esa variable de `nginx_fpm_backend`... no: se define en
+# group_vars/web.yml y se puede sobrescribir con --extra-vars.
+# ---------------------------------------------------------------------------
+
+- name: Instalar NGINX
+  ansible.builtin.apt:
+    name: "{{ nginx_package }}"
+    state: present
+    update_cache: true
+  become: true
+
+- name: Desplegar el script de validacion de la sintaxis de NGINX
+  ansible.builtin.copy:
+    src: validate-nginx.sh
+    dest: /tmp/validate-nginx.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Fijar la version de PHP usada en fastcgi_pass
+  ansible.builtin.set_fact:
+    fastcgi_socket_version: "{{ fastcgi_socket_version | default(php_version) }}"
+
+- name: Desplegar el virtual host de NGINX
+  ansible.builtin.template:
+    src: zonasrunning.conf.j2
+    dest: "{{ nginx_config_dir }}/{{ nginx_site_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+    # Valida la sintaxis ANTES de dejar el fichero en su sitio.
+    # El fichero es un bloque "server", asi que no se puede validar con
+    # "nginx -t -c" directamente (diria "server directive is not allowed
+    # here"): se envuelve en un bloque http{} temporal.
+    validate: >-
+      /tmp/validate-nginx.sh %s
+  become: true
+  notify: Recargar NGINX
+
+- name: Activar el sitio (crear enlace simbolico)
+  ansible.builtin.file:
+    src: "{{ nginx_config_dir }}/{{ nginx_site_name }}"
+    dest: "{{ nginx_enabled_dir }}/{{ nginx_site_name }}"
+    state: link
+  become: true
+  notify: Recargar NGINX
+
+- name: Desactivar el sitio por defecto de Ubuntu
+  ansible.builtin.file:
+    path: "{{ nginx_enabled_dir }}/default"
+    state: absent
+  become: true
+  notify: Recargar NGINX
+
+- name: Verificar la sintaxis de la configuracion de NGINX
+  ansible.builtin.command:
+    cmd: nginx -t
+  changed_when: false
+  become: true
+  register: nginx_syntax_check
+  failed_when: nginx_syntax_check.rc != 0
+
+- name: Comprobar que NGINX esta activo
+  ansible.builtin.systemd:
+    name: "{{ nginx_package }}"
+    state: started
+    enabled: true
+  become: true

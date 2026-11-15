@@ -1,0 +1,52 @@
+{#-
+  ---------------------------------------------------------------------------
+  Plantilla del virtual host de NGINX
+
+  En este repositorio la topologia es siempre "split": NGINX habla con
+  PHP-FPM por TCP.
+
+  ERROR INTENCIONADO: la directiva fastcgi_pass apunta a
+  {{ fpm_fastcgi_port }} (9001), que es el puerto equivocado: PHP-FPM
+  realmente escucha en el {{ fpm_fastcgi_correct_port }} (9000).
+
+  A diferencia de los otros escenarios, aqui el ORIGEN y el DESTINO de la
+  regla del security group son correctos: el SG de PHP-FPM abre el
+  {{ fpm_fastcgi_correct_port }} (9000) desde el SG de NGINX. El unico
+  que esta mal es el puerto del cliente (fastcgi_pass).
+
+  Sintoma: "502 Bad Gateway". NGINX abre la conexion contra el 9001,
+  donde no escucha nadie.
+  ---------------------------------------------------------------------------
+-#}
+server {
+
+    listen 80;
+
+    server_name {{ nginx_site_name }};
+
+    root {{ nginx_root }};
+    index index.php;
+
+    access_log /var/log/nginx/runningzones.access.log;
+    error_log /var/log/nginx/runningzones.error.log;
+
+    location / {
+
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+
+        include snippets/fastcgi-php.conf;
+
+        fastcgi_pass {{ php_fpm_backend }}:{{ fpm_fastcgi_wrong_port }};
+
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+
+        include fastcgi_params;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}

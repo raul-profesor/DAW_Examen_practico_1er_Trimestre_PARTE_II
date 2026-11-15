@@ -1,0 +1,101 @@
+---
+# ---------------------------------------------------------------------------
+# Rol app_deploy: despliega el codigo de "Running Zones Pro".
+#
+# El codigo se obtiene del repositorio publico
+#   https://github.com/raul-profesor/nginx-php-fpm.git
+#
+# En el escenario single el codigo va a la maquina que tiene NGINX (y PHP-FPM).
+# En el escenario split el codigo va a la maquina de PHP-FPM, que es quien
+# ejecuta el codigo PHP.
+# ---------------------------------------------------------------------------
+
+- name: Crear el directorio de la aplicacion
+  ansible.builtin.file:
+    path: "{{ app_root }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "{{ app_dir_mode }}"
+  become: true
+
+- name: Comprobar si la aplicacion ya esta desplegada
+  ansible.builtin.stat:
+    path: "{{ app_root }}/.git"
+  register: app_git_stat
+
+- name: Clonar el repositorio de la aplicacion
+  ansible.builtin.git:
+    repo: "{{ app_git_repo }}"
+    dest: "{{ app_root }}"
+    version: "{{ app_git_branch }}"
+    depth: 1
+    force: true
+  become: true
+  become_user: "{{ app_user }}"
+  when: not app_git_stat.stat.exists | default(false) | bool
+
+- name: Actualizar el codigo si ya estaba desplegado
+  ansible.builtin.git:
+    repo: "{{ app_git_repo }}"
+    dest: "{{ app_root }}"
+    version: "{{ app_git_branch if not app_git_ref else app_git_ref }}"
+    force: true
+  become: true
+  become_user: "{{ app_user }}"
+  when: app_git_stat.stat.exists | default(false) | bool
+
+- name: Ajustar propietario y grupo de todo el arbol
+  ansible.builtin.file:
+    path: "{{ app_root }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    recurse: true
+  become: true
+
+- name: Ajustar permisos de los directorios
+  ansible.builtin.shell: |
+    find {{ app_root }} -type d -exec chmod {{ app_dir_mode }} {} \;
+  changed_when: false
+  become: true
+
+- name: Ajustar permisos de los ficheros
+  ansible.builtin.shell: |
+    find {{ app_root }} -type f -exec chmod {{ app_file_mode }} {} \;
+  changed_when: false
+  become: true
+
+- name: Comprobar que la aplicacion esta desplegada
+  ansible.builtin.stat:
+    path: "{{ app_root }}/public/index.php"
+  register: app_index_stat
+
+- name: Verificar la presencia del codigo de la aplicacion
+  ansible.builtin.assert:
+    that:
+      - app_index_stat.stat.exists
+    fail_msg: >-
+      El codigo de la aplicacion no esta en {{ app_root }}/public/index.php.
+      Revisa el clon del repositorio {{ app_git_repo }}.
+    success_msg: "Aplicacion desplegada correctamente en {{ app_root }}"
+
+- name: Comprobar si el interprete PHP esta disponible
+  # OJO: este rol se aplica en las maquinas "web" y "fpm", pero el interprete
+  # "php" solo se instala en la maquina de PHP-FPM (la que ejecuta el codigo).
+  # En la maquina de NGINX no hay "php", asi que la comprobacion se salta
+  # cuando el interprete no esta disponible.
+  ansible.builtin.command:
+    cmd: "command -v php"
+  changed_when: false
+  failed_when: false
+  register: php_cli_lookup
+
+- name: Comprobar la sintaxis del codigo PHP
+  ansible.builtin.command:
+    cmd: "php -l {{ app_root }}/public/index.php"
+  changed_when: false
+  register: php_lint
+  failed_when: php_lint.rc != 0
+  become: true
+  when: php_cli_lookup.rc | default(1) == 0

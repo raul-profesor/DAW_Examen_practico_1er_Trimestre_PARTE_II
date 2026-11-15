@@ -1,0 +1,30 @@
+---
+- name: Actualizar los indices de paquetes
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Instalar paquetes basicos de administracion
+  ansible.builtin.apt:
+    name:
+      - rsync
+      - curl
+      - git
+      - unzip
+    state: present
+  become: true
+
+- name: Esperar a que cloud-init termine
+  ansible.builtin.shell: |
+    cloud-init status --wait >/dev/null 2>&1 || true
+  changed_when: false
+
+- name: Crear el directorio de la aplicacion
+  ansible.builtin.file:
+    path: "{{ app_root }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "{{ app_dir_mode }}"
+  become: true

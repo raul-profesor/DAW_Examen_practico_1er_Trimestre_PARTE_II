@@ -1,0 +1,91 @@
+---
+# ===========================================================================
+# Despliegue del escenario de DEBUGGING (v3-debug) con Ansible
+#
+# Topologia: NGINX en una maquina y PHP-FPM en otra, comunicandose por
+# FastCGI sobre TCP. Al final del despliegue se introducen DOS errores
+# intencionados (etiqueta "break") que los alumnos deben diagnosticar:
+#
+#   (a) El fastcgi_pass del NGINX apunta al 9001 en vez del 9000 -> 502
+#   (b) El codigo de la aplicacion no esta en la maquina de PHP-FPM -> 404
+#
+# Uso habitual (el inventario lo genera Terraform):
+#
+#   ansible-playbook playbooks/deploy.yml \
+#     -i inventory/hosts.ini \
+#     --extra-vars "deploy_scenario=v3-debug"
+#
+# Este playbook introduce SIEMPRE los dos errores del escenario de debugging.
+# No hay ninguna forma de desplegarlo "correcto" desde la automatizacion:
+# diagnosticar y corregir el fallo es parte del ejercicio.
+# ===========================================================================
+
+- name: Preparacion comun (todas las maquinas)
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: common
+      tags: [common, always]
+
+- name: NGINX en la maquina web
+  hosts: web
+  become: true
+  gather_facts: true
+  tags: [split, deploy]
+  roles:
+    - role: nginx
+      tags: [nginx, deploy]
+    # NGINX necesita el codigo en SU maquina: resuelve SCRIPT_FILENAME
+    # localmente a partir de "root" y se lo pasa a PHP-FPM, que lo ejecuta
+    # en la otra maquina. Si el codigo solo estuviera en el backend, NGINX
+    # responderia 404 ("Primary script unknown").
+    - role: app_deploy
+      tags: [app, deploy]
+
+- name: PHP-FPM en la maquina de backend
+  hosts: fpm
+  become: true
+  gather_facts: true
+  tags: [split, deploy]
+  roles:
+    - role: php_fpm
+      tags: [php, deploy]
+    - role: app_deploy
+      tags: [app, deploy]
+
+- name: Verificacion del despliegue
+  hosts: web
+  become: true
+  gather_facts: false
+  tags: [verify, deploy]
+  tasks:
+    - name: Comprobar el codigo de estado HTTP del sitio
+      ansible.builtin.uri:
+        url: "http://127.0.0.1/"
+        status_code: [200, 404, 502]
+        timeout: 15
+      register: site_check
+      failed_when: false
+      changed_when: false
+
+    - name: Mostrar el resultado de la verificacion
+      ansible.builtin.debug:
+        msg: >-
+          HTTP {{ site_check.status | default('sin respuesta') }}
+          - {% if site_check.status | default(0) == 200 %}despliegue correcto{% elif site_check.status | default(0) == 502 %}error 502: revisa el puerto del SG y el fastcgi_pass{% elif site_check.status | default(0) == 404 %}error 404: revisa que el codigo este desplegado en la maquina de PHP-FPM{% else %}sin respuesta: revisa que los servicios esten activos{% endif %}
+
+# ---------------------------------------------------------------------------
+# Escenario de debugging.
+#
+# Las tareas del rol debug_scenarios inyectan los errores SIEMPRE (no llevan
+# la etiqueta "break", asi que no se pueden saltar con --skip-tags) y no
+# existe ninguna forma de revertirlo desde la automatizacion: arreglar el
+# escenario es trabajo del alumno.
+# ---------------------------------------------------------------------------
+- name: Escenario de debugging (introduce los 2 errores)
+  hosts: web
+  become: true
+  gather_facts: false
+  roles:
+    - role: debug_scenarios

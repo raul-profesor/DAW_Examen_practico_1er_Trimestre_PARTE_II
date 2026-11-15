@@ -1,0 +1,88 @@
+---
+# ---------------------------------------------------------------------------
+# Configuracion del pool "www" de PHP-FPM
+#
+# En este escenario la topologia es siempre "split": el pool deja de usar el
+# socket Unix y pasa a escuchar por TCP 0.0.0.0:9000, para que NGINX (en
+# otra maquina) le pueda enviar las peticiones FastCGI.
+#
+# IMPORTANTE: cuando el pool escucha por TCP, los parametros `listen.owner`
+# y `listen.group` no aplican (no hay socket de fichero). El control de
+# acceso real lo hace el security group de AWS, que solo acepta trafico
+# 9000 (el puerto correcto) procedente del SG de la maquina de NGINX.
+#
+# Ojo: en el escenario de debugging el error NO esta en PHP-FPM (el pool
+# escucha correctamente en el 9000) ni en el security group (abre el 9000,
+# que es el puerto correcto). El error esta en el cliente: el fastcgi_pass
+# del NGINX apunta al 9001. Por eso este fichero DEBE dejar el pool
+# escuchando siempre en el puerto correcto (9000).
+# ---------------------------------------------------------------------------
+
+- name: Localizar el fichero www.conf del pool www
+  ansible.builtin.command:
+    cmd: "find /etc/php -path '*/fpm/pool.d/www.conf' -print -quit"
+  register: php_fpm_pool_lookup
+  changed_when: false
+  become: true
+
+- name: Fijar la ruta real del pool www.conf
+  ansible.builtin.set_fact:
+    php_fpm_pool_file_real: >-
+      {{ php_fpm_pool_lookup.stdout | default('') | trim
+         if (php_fpm_pool_lookup.stdout | default('') | trim) != ''
+         else php_fpm_pool_file }}
+
+- name: Comprobar si el pool www existe
+  ansible.builtin.stat:
+    path: "{{ php_fpm_pool_file_real }}"
+  register: php_fpm_pool_stat
+  become: true
+
+- name: Crear el pool www si no existe
+  ansible.builtin.copy:
+    dest: "{{ php_fpm_pool_file_real }}"
+    content: |
+      ; Pool "www" generado por Ansible (topologia split)
+      [www]
+      user = {{ app_user }}
+      group = {{ app_group }}
+      listen = {{ php_fpm_listen }}
+
+      pm = dynamic
+      pm.max_children = 5
+      pm.start_servers = 2
+      pm.min_spare_servers = 1
+      pm.max_spare_servers = 3
+
+      php_admin_value[error_log] = /var/log/php{{ php_version }}-fpm.log
+      php_admin_flag[log_errors] = on
+      php_admin_value[display_errors] = off
+  become: true
+  when: not php_fpm_pool_stat.stat.exists | default(false) | bool
+
+- name: Asegurar que el pool www escucha en el puerto correcto ({{ fpm_fastcgi_correct_port }})
+  ansible.builtin.replace:
+    path: "{{ php_fpm_pool_file_real }}"
+    regexp: '^\s*listen\s*=.*$'
+    replace: "listen = 0.0.0.0:{{ fpm_fastcgi_correct_port }}"
+  become: true
+
+- name: Verificar la configuracion de PHP-FPM
+  ansible.builtin.command:
+    cmd: "php-fpm{{ php_version }} -t"
+  changed_when: false
+  become: true
+
+- name: Reiniciar PHP-FPM
+  ansible.builtin.systemd:
+    name: "php{{ php_version }}-fpm"
+    state: restarted
+    daemon_reload: true
+  become: true
+
+- name: Comprobar que el puerto TCP de FastCGI esta escuchando
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ fpm_fastcgi_correct_port }}"
+    timeout: 20
+  become: true

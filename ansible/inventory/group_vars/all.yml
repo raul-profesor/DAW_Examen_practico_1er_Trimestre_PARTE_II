@@ -1,0 +1,62 @@
+---
+# ---------------------------------------------------------------------------
+# Variables comunes del escenario de debugging (v3-debug)
+# ---------------------------------------------------------------------------
+
+# --- Identificacion del despliegue -----------------------------------------
+project_name: running-zones
+# OJO: "environment" es un nombre reservado en Ansible, por eso la variable
+# del escenario se llama "deploy_scenario".
+deploy_scenario: v3-debug
+
+# --- Aplicacion -------------------------------------------------------------
+# Repositorio publico con el codigo de "Running Zones Pro".
+app_git_repo: https://github.com/raul-profesor/nginx-php-fpm.git
+app_git_branch: main
+app_git_ref: ""            # si se indica (tag o commit), se usa ese checkout
+
+# Directorio donde se despliega la aplicacion en el servidor.
+app_root: /var/www/running-zones
+app_user: www-data
+app_group: www-data
+app_dir_mode: "0755"
+app_file_mode: "0644"
+
+# En que maquinas vive el codigo de la aplicacion.
+# En la topologia "split" vive en la maquina de PHP-FPM, que es quien
+# ejecuta el codigo PHP.
+app_deploy_here: true
+
+# --- PHP-FPM ---------------------------------------------------------------
+php_version: "8.3"
+php_packages:
+  - php{{ php_version }}
+  - php{{ php_version }}-fpm
+  - php-cli
+  - php-mbstring
+  - php-xml
+  - php-curl
+
+# Pool de PHP-FPM (ruta del fichero de configuracion del pool "www")
+php_fpm_pool_dir: "/etc/php/{{ php_version }}/fpm/pool.d"
+php_fpm_pool_file: "{{ php_fpm_pool_dir }}/www.conf"
+
+# Socket Unix que usa PHP-FPM (no se usa en este escenario, que es "split")
+php_fpm_socket: "/run/php/php{{ php_version }}-fpm.sock"
+
+# Puerto TCP de FastCGI: es donde REALMENTE escucha PHP-FPM.
+php_fpm_tcp_port: 9000
+
+# Direccion de escucha del pool "www" de PHP-FPM cuando usa TCP.
+php_fpm_listen: "0.0.0.0:{{ php_fpm_tcp_port }}"
+
+# --- NGINX -----------------------------------------------------------------
+nginx_package: nginx
+nginx_site_name: zonasrunning
+nginx_config_dir: /etc/nginx/sites-available
+nginx_enabled_dir: /etc/nginx/sites-enabled
+nginx_root: "{{ app_root }}/public"
+
+# --- Comprobaciones --------------------------------------------------------
+# Host que se usa en las pruebas HTTP con curl (--resolve).
+site_hostname: zonasrunning
