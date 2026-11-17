@@ -9,13 +9,10 @@
 # IMPORTANTE: cuando el pool escucha por TCP, los parametros `listen.owner`
 # y `listen.group` no aplican (no hay socket de fichero). El control de
 # acceso real lo hace el security group de AWS, que solo acepta trafico
-# 9000 (el puerto correcto) procedente del SG de la maquina de NGINX.
+# FastCGI procedente del SG de la maquina de NGINX.
 #
-# Ojo: en el escenario de debugging el error NO esta en PHP-FPM (el pool
-# escucha correctamente en el 9000) ni en el security group (abre el 9000,
-# que es el puerto correcto). El error esta en el cliente: el fastcgi_pass
-# del NGINX apunta al 9001. Por eso este fichero DEBE dejar el pool
-# escuchando siempre en el puerto correcto (9000).
+# Por eso este fichero DEBE dejar el pool escuchando siempre en el puerto
+# correcto ({{ fpm_fastcgi_correct_port }} = 9000).
 # ---------------------------------------------------------------------------
 
 - name: Localizar el fichero www.conf del pool www

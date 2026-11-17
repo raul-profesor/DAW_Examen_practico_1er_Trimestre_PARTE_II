@@ -8,8 +8,8 @@
 nginx_fpm_mode: tcp
 
 # Version de PHP que aparece en la directiva fastcgi_pass.
-# En la topologia split la version no aparece (solo IP:9000), asi que el
-# error introducido (a) esta en el security group, no aqui.
+# En la topologia split la version no aparece (solo IP:puerto), asi que
+# aqui no se usa.
 fastcgi_socket_version: "{{ php_version }}"
 
 # IP privada de la maquina con PHP-FPM (la que tiene el codigo de la app).

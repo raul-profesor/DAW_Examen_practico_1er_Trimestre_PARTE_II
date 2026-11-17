@@ -43,18 +43,15 @@
 #
 # El rol nginx solo se aplica a la maquina "web", pero en esta maquina
 # NGINX tambien esta instalado (lo instala el rol php_fpm). Aqui se
-# despliega el virtual host CORRECTAMENTE configurado: el fastcgi_pass
-# apunta al puerto en el que realmente escucha PHP-FPM (9000).
+# despliega el virtual host con la directiva fastcgi_pass apuntando al
+# puerto en el que realmente escucha PHP-FPM (9000).
 #
 # Ojo: este fichero NO se activa (no se crea el enlace en sites-enabled),
 # porque en esta maquina no tiene que servir nada: el trafico entra por la
 # maquina "web" y se reenvia a PHP-FPM por FastCGI.
-#
-# Lo unico que debe faltar en esta maquina es el CODIGO de la aplicacion
-# (lo borra el rol debug_scenarios) -> sintoma 404 "File not found".
 # ---------------------------------------------------------------------------
 
-- name: Desplegar el virtual host de NGINX (correctamente configurado)
+- name: Desplegar el virtual host de NGINX
   ansible.builtin.template:
     src: zonasrunning-fpm.conf.j2
     dest: "{{ nginx_config_dir }}/{{ nginx_site_name }}"

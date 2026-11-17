@@ -28,13 +28,13 @@ resource "aws_key_pair" "deploy" {
 # ---------------------------------------------------------------------------
 # Instancias
 #
-# El escenario de debugging usa siempre topologia "split": dos maquinas.
+# El escenario usa siempre topologia "split": dos maquinas.
 #   - "web": NGINX (la unica expuesta a Internet)
 #   - "fpm": PHP-FPM + el codigo de la aplicacion
 #
 # Se comunican por FastCGI/TCP. El security group de FPM acepta el trafico
-# en el puerto `fpm_fastcgi_port` (9000: el correcto) viniendo del
-# security group de la maquina de NGINX.
+# en el puerto `fpm_fastcgi_port` (9000) viniendo del security group de la
+# maquina de NGINX.
 # ---------------------------------------------------------------------------
 
 module "instances" {

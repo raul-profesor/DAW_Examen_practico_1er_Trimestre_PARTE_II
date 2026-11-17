@@ -3,20 +3,15 @@
 # Valores por defecto del rol debug_scenarios
 # ---------------------------------------------------------------------------
 #
-# El error (a) NO esta en el security group: el SG de PHP-FPM abre el
-# `fpm_fastcgi_port` (9000) desde el SG de la maquina de NGINX, que es
-# exactamente donde escucha PHP-FPM. El security group es CORRECTO.
+# El security group de PHP-FPM abre el `fpm_fastcgi_port` (9000) desde el SG
+# de la maquina de NGINX, que es donde realmente escucha PHP-FPM.
 #
-# El error introducido esta en el CLIENTE: la directiva fastcgi_pass del
-# NGINX apunta al `fpm_fastcgi_wrong_port` (9001), donde no escucha nadie.
-#
+# La directiva fastcgi_pass del NGINX apunta al `fpm_fastcgi_backend_port`.
 # Esa variable la define Terraform (ver terraform/environments/v3-debug.tfvars)
-# y llega al inventario por el output `fpm_fastcgi_wrong_port`.
+# y llega al inventario por el output `fpm_fastcgi_backend_port`.
 
-# Carpetas del codigo de la aplicacion que se borran en la maquina de
-# PHP-FPM. Se borran TODAS (public/, src/, nginx/, fpm/, php/): el codigo
-# completo desaparece de la maquina que ejecuta PHP, que es como se queda
-# una maquina a la que se le ha olvidado desplegar la aplicacion.
+# Carpetas del codigo de la aplicacion que se retiran en la maquina de
+# PHP-FPM: public/, src/, nginx/, fpm/ y php/.
 #
 # Se dejan intactos el directorio .git y los ficheros sueltos de la raiz,
 # para que el repositorio siga siendo un clon de git valido.

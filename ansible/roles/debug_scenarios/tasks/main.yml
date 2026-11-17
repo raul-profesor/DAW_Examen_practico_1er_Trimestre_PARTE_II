@@ -1,116 +1,96 @@
 ---
 # ---------------------------------------------------------------------------
-# Rol debug_scenarios: ESCENARIO DE DEBUGGING (v3-debug)
+# Rol debug_scenarios: preparacion del escenario v3-debug
 #
 # Topologia: NGINX y PHP-FPM en maquinas separadas (FastCGI sobre TCP).
 #
-# Introduce DOS errores intencionados DESPUES de un despliegue correcto:
+# Este rol ejecuta dos operaciones de preparacion sobre las maquinas del
+# escenario:
 #
-#   a) PUERTO ERRONEO EN EL fastcgi_pass DEL NGINX
-#      La maquina de NGINX habla con PHP-FPM por el puerto 9001, donde no
-#      escucha nadie. PHP-FPM realmente escucha en el 9000.
+#   a) Verificacion de la configuracion de FastCGI
+#      Se comprueba que PHP-FPM esta escuchando en el puerto esperado
+#      ({{ fpm_fastcgi_correct_port }}) y que la directiva fastcgi_pass del
+#      NGINX apunta al puerto configurado ({{ fpm_fastcgi_backend_port }}).
 #
-#      El security group de PHP-FPM es CORRECTO: abre el 9000 desde el SG
-#      de la maquina de NGINX. El unico que esta mal es el cliente.
-#
-#      Sintoma: "502 Bad Gateway". NGINX abre la conexion contra el puerto
-#      9001 y no hay ningun proceso escuchando ahi.
-#
-#      Diagnostico: comparar el puerto del fastcgi_pass de NGINX con el
-#      real de escucha de PHP-FPM (ss -tln) y con el del security group.
-#
-#   b) CODIGO AUSENTE EN LA MAQUINA DE PHP-FPM
-#      Se borran TODAS las carpetas del codigo de la aplicacion del
-#      servidor de PHP-FPM (la maquina de NGINX conserva el suyo).
-#      Sintoma: "File not found." (404) en /var/log/php8.3-fpm.log.
+#   b) Sincronizacion del codigo de la aplicacion
+#      Se retiran las carpetas del codigo de la aplicacion del servidor de
+#      PHP-FPM (la maquina de NGINX conserva el suyo).
 #
 # ---------------------------------------------------------------------------
-# IMPORTANTE: este rol NO tiene forma de "revertir" los errores.
+# IMPORTANTE: este rol no tiene ninguna forma de "revertir" las operaciones.
 #
-# El escenario de debugging se despliega de una unica manera: con los errores
-# introducidos. Que el alumno los diagnostique y los corrija es parte del
-# ejercicio, asi que la automatizacion no lo hace por el.
+# El escenario se despliega de una unica manera: con las tareas aplicadas.
+# Que el alumno las diagnostique y las corrija es parte del ejercicio, asi que
+# la automatizacion no lo hace por el.
 #
-# Por eso las tareas NO llevan la etiqueta "break" (que permitiria saltarlas
-# con --skip-tags) y NO hay bloque "fix" ni variable "debug_apply_fix".
-# ---------------------------------------------------------------------------
-#
-# NOTA sobre el error (a): la directiva fastcgi_pass la genera la plantilla
-# del rol nginx con la variable `fpm_fastcgi_wrong_port`, que en este
-# repositorio vale 9001 (ver terraform/environments/v3-debug.tfvars), de
-# modo que el error ya existe desde el despliegue. Este rol unicamente lo
-# VERIFICA, para que el alumno vea que el despliegue "parece" correcto.
+# Por eso las tareas NO llevan ninguna etiqueta que permita saltarlas con
+# --skip-tags, y no hay ningun bloque ni variable para revertirlas.
 # ---------------------------------------------------------------------------
 
-- name: Introducir los errores de debugging
+- name: Preparacion del escenario v3-debug
   when: deploy_scenario == 'v3-debug'
   block:
 
     # =================================================================
-    # ERROR (a): la maquina de NGINX habla con PHP-FPM por el puerto
-    # equivocado ({{ fpm_fastcgi_wrong_port }} = 9001) en lugar del
-    # {{ fpm_fastcgi_correct_port }} (9000) donde escucha PHP-FPM.
-    #
-    # El security group de PHP-FPM es CORRECTO: abre el
-    # {{ fpm_fastcgi_port }} (9000) desde el SG de la maquina de NGINX.
-    # El unico que esta mal es el cliente (la directiva fastcgi_pass).
+    # Verificacion de la configuracion de FastCGI entre NGINX y PHP-FPM.
     # =================================================================
 
-    - name: "ERROR (a): mostrar el estado de la regla FastCGI del SG de PHP-FPM"
+    - name: Mostrar el estado de la regla FastCGI del SG de PHP-FPM
       ansible.builtin.debug:
         msg:
-          - "Regla FastCGI del SG de PHP-FPM: puerto destino {{ fpm_fastcgi_port }} (donde escucha PHP-FPM) - CORRECTO"
-          - "Origen de la regla: {{ web_sg_id }} (SG de la maquina de NGINX) - correcto"
-          - "fastcgi_pass del NGINX: {{ php_fpm_backend }}:{{ fpm_fastcgi_wrong_port }} - ERROR INTENCIONADO"
+          - "Regla FastCGI del SG de PHP-FPM: puerto destino {{ fpm_fastcgi_port }}"
+          - "Origen de la regla: {{ web_sg_id }} (SG de la maquina de NGINX)"
+          - "fastcgi_pass del NGINX: {{ php_fpm_backend }}:{{ fpm_fastcgi_backend_port }}"
 
-    - name: "ERROR (a): comprobar que PHP-FPM NO escucha en el puerto {{ fpm_fastcgi_wrong_port }}"
+    - name: Comprobar que PHP-FPM escucha en el puerto {{ fpm_fastcgi_backend_port }}
       ansible.builtin.shell: |
-        ss -tln | grep -qE 'LISTEN.*:{{ fpm_fastcgi_wrong_port }}[[:space:]]' && echo OPEN || echo CLOSED
-      register: wrong_port_check
+        ss -tln | grep -qE 'LISTEN.*:{{ fpm_fastcgi_backend_port }}[[:space:]]' && echo OPEN || echo CLOSED
+      register: backend_port_check
       delegate_to: "{{ groups['fpm'][0] if 'fpm' in groups else groups['web'][0] }}"
       changed_when: false
 
-    - name: "ERROR (a): confirmar que PHP-FPM escucha en el puerto real ({{ fpm_fastcgi_correct_port }})"
+    - name: Comprobar que PHP-FPM escucha en el puerto {{ fpm_fastcgi_correct_port }}
       ansible.builtin.shell: |
         ss -tln | grep -qE 'LISTEN.*:{{ fpm_fastcgi_correct_port }}[[:space:]]' && echo OPEN || echo CLOSED
       register: correct_port_check
       delegate_to: "{{ groups['fpm'][0] if 'fpm' in groups else groups['web'][0] }}"
       changed_when: false
 
-    - name: "ERROR (a): comprobar que el NGINX apunta al puerto equivocado ({{ fpm_fastcgi_wrong_port }})"
+    - name: Comprobar que el NGINX apunta al puerto {{ fpm_fastcgi_backend_port }}
       ansible.builtin.shell: |
-        grep -qE 'fastcgi_pass[[:space:]]+{{ php_fpm_backend }}:{{ fpm_fastcgi_wrong_port }}' \
-          {{ nginx_config_dir }}/{{ nginx_site_name }} && echo WRONG || echo OK
+        grep -qE 'fastcgi_pass[[:space:]]+{{ php_fpm_backend }}:{{ fpm_fastcgi_backend_port }}' \
+          {{ nginx_config_dir }}/{{ nginx_site_name }} && echo OK || echo KO
       register: nginx_pass_check
       changed_when: false
       delegate_to: "{{ groups['web'][0] if 'web' in groups else groups['fpm'][0] }}"
 
-    - name: "ERROR (a): validar el estado del error (puerto equivocado cerrado, puerto correcto abierto, NGINX mal apuntado)"
+    - name: Validar la configuracion de FastCGI
       ansible.builtin.assert:
         that:
-          - "'CLOSED' in wrong_port_check.stdout"
           - "'OPEN' in correct_port_check.stdout"
-          - "'WRONG' in nginx_pass_check.stdout"
+          - "'OK' in nginx_pass_check.stdout"
         fail_msg: >-
-          El estado no es el esperado: el puerto {{ fpm_fastcgi_wrong_port }}
-          deberia estar cerrado, el {{ fpm_fastcgi_correct_port }} abierto y el
-          fastcgi_pass del NGINX deberia apuntar a {{ fpm_fastcgi_wrong_port }}.
+          La configuracion de FastCGI no es la esperada: PHP-FPM deberia
+          estar escuchando en el {{ fpm_fastcgi_correct_port }} y el
+          fastcgi_pass del NGINX deberia apuntar a
+          {{ php_fpm_backend }}:{{ fpm_fastcgi_backend_port }}.
         success_msg: >-
-          Error introducido: el fastcgi_pass del NGINX apunta al
-          {{ fpm_fastcgi_wrong_port }} pero PHP-FPM escucha en el
-          {{ fpm_fastcgi_correct_port }} -> 502 Bad Gateway
+          Configuracion de FastCGI verificada: PHP-FPM escucha en el
+          {{ fpm_fastcgi_correct_port }} y el NGINX apunta al
+          {{ fpm_fastcgi_backend_port }}.
 
     # =================================================================
-    # ERROR (b): el codigo no esta presente en la maquina de PHP-FPM.
+    # Sincronizacion del codigo de la aplicacion en la maquina de
+    # PHP-FPM.
     #
-    # Se borran TODAS las carpetas del codigo (public/, src/, nginx/, fpm/,
+    # Se retiran las carpetas del codigo (public/, src/, nginx/, fpm/,
     # php/) SOLO en la maquina de PHP-FPM, que es la que ejecuta el codigo.
     #
     # La maquina de NGINX (el proxy) CONSERVA todo el codigo: NGINX resuelve
     # SCRIPT_FILENAME en local y se lo pasa a PHP-FPM, que lo ejecuta en la
     # otra maquina. Por eso el codigo tiene que estar en el proxy.
     # =================================================================
-    - name: "ERROR (b): borrar el codigo de la aplicacion en la maquina de PHP-FPM"
+    - name: Retirar el codigo de la aplicacion en la maquina de PHP-FPM
       ansible.builtin.file:
         path: "{{ app_root }}/{{ item }}"
         state: absent
@@ -118,7 +98,7 @@
       loop: "{{ debug_removed_app_paths }}"
       delegate_to: "{{ groups['fpm'][0] if 'fpm' in groups else groups['web'][0] }}"
 
-    - name: "ERROR (b): verificar que el codigo ha desaparecido"
+    - name: Verificar el estado del codigo en la maquina de PHP-FPM
       ansible.builtin.stat:
         path: "{{ app_root }}/{{ item }}"
       become: true
@@ -126,7 +106,7 @@
       delegate_to: "{{ groups['fpm'][0] if 'fpm' in groups else groups['web'][0] }}"
       loop: "{{ debug_removed_app_paths }}"
 
-    - name: "ERROR (b): confirmar que el codigo no esta en la maquina de PHP-FPM"
+    - name: Confirmar el estado del codigo en la maquina de PHP-FPM
       ansible.builtin.assert:
         that:
           - not removed_code.results[0].stat.exists
@@ -134,10 +114,10 @@
           - not removed_code.results[2].stat.exists
           - not removed_code.results[3].stat.exists
           - not removed_code.results[4].stat.exists
-        fail_msg: "El codigo sigue presente: el error (b) no se ha introducido bien."
-        success_msg: "Error introducido: el codigo no esta en la maquina de PHP-FPM -> File not found"
+        fail_msg: "El estado del codigo en la maquina de PHP-FPM no es el esperado."
+        success_msg: "El codigo de la aplicacion se ha retirado de la maquina de PHP-FPM"
 
-    - name: "ERROR (b): comprobar que el proxy (NGINX) conserva todo el codigo"
+    - name: Comprobar que el proxy (NGINX) conserva todo el codigo
       ansible.builtin.stat:
         path: "{{ app_root }}/{{ item }}"
       become: true
@@ -145,7 +125,7 @@
       delegate_to: "{{ groups['web'][0] if 'web' in groups else groups['fpm'][0] }}"
       loop: "{{ debug_removed_app_paths }}"
 
-    - name: "ERROR (b): confirmar que el proxy (NGINX) conserva todo el codigo"
+    - name: Confirmar que el proxy (NGINX) conserva todo el codigo
       ansible.builtin.assert:
         that:
           - kept_code.results[0].stat.exists
@@ -156,13 +136,11 @@
         fail_msg: "El proxy (NGINX) ha perdido el codigo: deberia conservarlo."
         success_msg: "El proxy (NGINX) conserva todo el codigo de la aplicacion"
 
-    - name: Mostrar el resumen de los errores introducidos
+    - name: Mostrar el resumen de la preparacion
       ansible.builtin.debug:
         msg:
-          - "ESCENARIO DE DEBUGGING ACTIVADO (entorno: {{ deploy_scenario }})"
-          - "(a) El fastcgi_pass del NGINX apunta al {{ fpm_fastcgi_wrong_port }} en lugar del {{ fpm_fastcgi_correct_port }}."
-          - "    Sintoma esperado: 502 Bad Gateway (no hay nadie escuchando en ese puerto)."
-          - "(b) El codigo de la aplicacion se ha borrado de la maquina de PHP-FPM ({{ app_root }})."
-          - "    Sintoma esperado: File not found. en /var/log/php{{ php_version }}-fpm.log"
+          - "ESCENARIO v3-debug ACTIVADO (entorno: {{ deploy_scenario }})"
+          - "FastCGI: PHP-FPM escucha en el {{ fpm_fastcgi_correct_port }}."
+          - "Codigo de la aplicacion retirado de la maquina de PHP-FPM ({{ app_root }})."
           - ""
           - "Ahora le toca al alumno: diagnosticar y corregir."

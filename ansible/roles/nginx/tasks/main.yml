@@ -3,14 +3,8 @@
 # Rol nginx: instala, configura el virtual host y valida la sintaxis.
 #
 # La variable `fastcgi_socket_version` decide que version de PHP aparece en
-# la directiva fastcgi_pass:
-#
-#   - Escenarios v1/v2 : "8.3" (la version realmente instalada) -> correcto.
-#   - Escenario v3     : el fastcgi_pass apunta al puerto equivocado
-#                        (fpm_fastcgi_wrong_port = 9001) -> 502.
-#
-# El rol lee esa variable de `nginx_fpm_backend`... no: se define en
-# group_vars/web.yml y se puede sobrescribir con --extra-vars.
+# la directiva fastcgi_pass (se define en group_vars/web.yml y se puede
+# sobrescribir con --extra-vars).
 # ---------------------------------------------------------------------------
 
 - name: Instalar NGINX

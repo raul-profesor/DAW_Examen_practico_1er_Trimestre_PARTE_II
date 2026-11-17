@@ -67,13 +67,13 @@ output "fpm_fastcgi_port" {
 }
 
 output "fpm_fastcgi_correct_port" {
-  description = "Puerto en el que realmente escucha PHP-FPM (el correcto)"
+  description = "Puerto en el que realmente escucha PHP-FPM"
   value       = var.fpm_fastcgi_correct_port
 }
 
-output "fpm_fastcgi_wrong_port" {
-  description = "Puerto erroneo al que apunta el fastcgi_pass del NGINX"
-  value       = var.fpm_fastcgi_wrong_port
+output "fpm_fastcgi_backend_port" {
+  description = "Puerto al que apunta el fastcgi_pass del NGINX"
+  value       = var.fpm_fastcgi_backend_port
 }
 
 # ---------------------------------------------------------------------------
@@ -95,20 +95,20 @@ locals {
   ansible_inventory_content = <<-EOT
     # ==========================================================
     # Inventario generado automaticamente por Terraform
-    # Escenario: ${var.environment} (debugging)
+    # Escenario: ${var.environment}
     # NO EDITAR A MANO: se regenera en cada `terraform apply`.
     # ==========================================================
 
     [all:vars]
     scenario=${var.environment}
     fpm_private_ip=${local.fpm_private_ip}
-    # Datos de la regla FastCGI del SG de PHP-FPM (para el escenario de debugging)
+    # Datos de la regla FastCGI del SG de PHP-FPM
     fpm_sg_id=${aws_security_group.fpm.id}
     web_sg_id=${aws_security_group.web.id}
     fpm_fastcgi_rule_id=${aws_vpc_security_group_ingress_rule.fpm_fastcgi.security_group_rule_id}
     fpm_fastcgi_port=${var.fpm_fastcgi_port}
     fpm_fastcgi_correct_port=${var.fpm_fastcgi_correct_port}
-    fpm_fastcgi_wrong_port=${var.fpm_fastcgi_wrong_port}
+    fpm_fastcgi_backend_port=${var.fpm_fastcgi_backend_port}
 
     [web]
     ${module.instances[0].public_ip} ansible_host=${module.instances[0].public_ip}

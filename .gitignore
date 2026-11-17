@@ -20,6 +20,9 @@ ansible/*.retry
 .env.*
 !.env.example
 
+# --- Documentacion privada (solo para el profesor) ---
+docs/privado/
+
 # --- Sistema operativo y editores ---
 .DS_Store
 Thumbs.db

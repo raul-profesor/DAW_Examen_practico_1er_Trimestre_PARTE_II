@@ -3,19 +3,13 @@
   Virtual host de NGINX para la maquina de PHP-FPM.
 
   A diferencia del virtual host de la maquina "web" (el proxy), este esta
-  CORRECTAMENTE configurado: la directiva fastcgi_pass apunta al puerto en
-  el que realmente escucha PHP-FPM ({{ fpm_fastcgi_correct_port }} = 9000).
-
-  El error introducido del escenario NO esta aqui: esta en el fastcgi_pass
-  del proxy (la maquina "web"), que apunta al puerto equivocado.
+  configurado con la directiva fastcgi_pass apuntando al puerto en el que
+  realmente escucha PHP-FPM ({{ fpm_fastcgi_correct_port }} = 9000).
 
   En esta maquina NGINX esta instalado (lo instala este mismo rol), pero el
   virtual host NO se activa: no se crea el enlace en sites-enabled, porque
   aqui no tiene que servir nada. El trafico entra por la maquina "web" y se
   reenvia a PHP-FPM por FastCGI.
-
-  Lo unico que debe faltar en esta maquina es el CODIGO de la aplicacion
-  (/var/www/running-zones), que borra el rol debug_scenarios.
   ---------------------------------------------------------------------------
 -#}
 server {

@@ -1,8 +1,8 @@
 # ---------------------------------------------------------------------------
-# Variables del escenario de DEBUGGING (v3-debug)
+# Variables del escenario v3-debug
 #
 # Este repositorio despliega un unico escenario: NGINX y PHP-FPM en maquinas
-# separadas (topologia "split") con dos errores introducidos a proposito.
+# separadas (topologia "split").
 # ---------------------------------------------------------------------------
 
 variable "aws_region" {
@@ -55,28 +55,24 @@ variable "fpm_fastcgi_port" {
     Puerto TCP de FastCGI que abre el security group de la maquina de PHP-FPM
     (la regla tiene como ORIGEN el security group de la maquina de NGINX).
 
-    En este repositorio vale 9000, que es donde realmente escucha PHP-FPM:
-    el security group es CORRECTO.
+    Vale 9000, que es donde realmente escucha PHP-FPM.
   EOT
   type        = number
   default     = 9000
-}
-
-variable "fpm_fastcgi_wrong_port" {
-  description = <<-EOT
-    Puerto ERRONEO al que apunta la directiva fastcgi_pass del NGINX.
-
-    ERROR INTENCIONADO: vale 9001, pero PHP-FPM escucha en el
-    `fpm_fastcgi_correct_port` (9000). El unico que esta mal es el cliente.
-  EOT
-  type        = number
-  default     = 9001
 }
 
 variable "fpm_fastcgi_correct_port" {
-  description = "Puerto en el que realmente escucha PHP-FPM (el correcto)"
+  description = "Puerto en el que realmente escucha PHP-FPM"
   type        = number
   default     = 9000
+}
+
+variable "fpm_fastcgi_backend_port" {
+  description = <<-EOT
+    Puerto al que apunta la directiva fastcgi_pass del NGINX.
+  EOT
+  type        = number
+  default     = 9001
 }
 
 variable "tags" {

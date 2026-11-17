@@ -4,13 +4,8 @@
 #   SG "web" -> SSH (22) desde el mundo + HTTP (80) desde el mundo
 #   SG "fpm" -> SSH (22) desde el mundo + FastCGI (9000) DESDE EL SG "web"
 #
-# En este escenario el security group de PHP-FPM es CORRECTO: abre el
-# `fpm_fastcgi_port` (9000), que es donde realmente escucha PHP-FPM, y
-# solo desde el SG de la maquina de NGINX.
-#
-# ERROR INTENCIONADO (a): NO esta aqui, sino en el cliente: la directiva
-# fastcgi_pass del NGINX apunta al puerto 9001 (fpm_fastcgi_wrong_port),
-# donde no escucha nadie -> 502 Bad Gateway.
+# El SG de PHP-FPM abre el `fpm_fastcgi_port` (9000), que es donde realmente
+# escucha PHP-FPM, y solo desde el SG de la maquina de NGINX.
 # ---------------------------------------------------------------------------
 
 resource "aws_security_group" "web" {

@@ -1,13 +1,9 @@
 ---
 # ===========================================================================
-# Despliegue del escenario de DEBUGGING (v3-debug) con Ansible
+# Despliegue del escenario v3-debug con Ansible
 #
 # Topologia: NGINX en una maquina y PHP-FPM en otra, comunicandose por
-# FastCGI sobre TCP. Al final del despliegue se introducen DOS errores
-# intencionados (etiqueta "break") que los alumnos deben diagnosticar:
-#
-#   (a) El fastcgi_pass del NGINX apunta al 9001 en vez del 9000 -> 502
-#   (b) El codigo de la aplicacion no esta en la maquina de PHP-FPM -> 404
+# FastCGI sobre TCP.
 #
 # Uso habitual (el inventario lo genera Terraform):
 #
@@ -15,9 +11,8 @@
 #     -i inventory/hosts.ini \
 #     --extra-vars "deploy_scenario=v3-debug"
 #
-# Este playbook introduce SIEMPRE los dos errores del escenario de debugging.
-# No hay ninguna forma de desplegarlo "correcto" desde la automatizacion:
-# diagnosticar y corregir el fallo es parte del ejercicio.
+# El playbook termina ejecutando las tareas de preparacion del escenario
+# (rol debug_scenarios), que forman parte del ejercicio.
 # ===========================================================================
 
 - name: Preparacion comun (todas las maquinas)
@@ -73,17 +68,16 @@
       ansible.builtin.debug:
         msg: >-
           HTTP {{ site_check.status | default('sin respuesta') }}
-          - {% if site_check.status | default(0) == 200 %}despliegue correcto{% elif site_check.status | default(0) == 502 %}error 502: revisa el puerto del SG y el fastcgi_pass{% elif site_check.status | default(0) == 404 %}error 404: revisa que el codigo este desplegado en la maquina de PHP-FPM{% else %}sin respuesta: revisa que los servicios esten activos{% endif %}
+          - {% if site_check.status | default(0) == 200 %}despliegue correcto{% elif site_check.status | default(0) == 502 %}error 502: revisa la comunicacion entre NGINX y PHP-FPM{% elif site_check.status | default(0) == 404 %}error 404: revisa que el codigo este desplegado en la maquina de PHP-FPM{% else %}sin respuesta: revisa que los servicios esten activos{% endif %}
 
 # ---------------------------------------------------------------------------
-# Escenario de debugging.
+# Preparacion final del escenario.
 #
-# Las tareas del rol debug_scenarios inyectan los errores SIEMPRE (no llevan
-# la etiqueta "break", asi que no se pueden saltar con --skip-tags) y no
-# existe ninguna forma de revertirlo desde la automatizacion: arreglar el
-# escenario es trabajo del alumno.
+# Las tareas del rol debug_scenarios se aplican siempre (no llevan ninguna
+# etiqueta que permita saltarlas con --skip-tags) y no existe ninguna forma
+# de revertirlas desde la automatizacion.
 # ---------------------------------------------------------------------------
-- name: Escenario de debugging (introduce los 2 errores)
+- name: Preparacion del escenario v3-debug
   hosts: web
   become: true
   gather_facts: false

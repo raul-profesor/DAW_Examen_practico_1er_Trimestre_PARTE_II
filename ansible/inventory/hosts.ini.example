@@ -10,8 +10,7 @@
 #      las instancias)
 #
 # El inventario generado por Terraform tiene el mismo formato (y además
-# rellena los datos del security group, que son los que usa el escenario
-# de debugging).
+# rellena los datos del security group).
 # ==========================================================
 
 [all:vars]
@@ -20,14 +19,13 @@
 # reales de la consola de AWS (o de `terraform output`).
 #
 #   fpm_fastcgi_port         -> puerto destino de la regla FastCGI del SG
-#                              (9000: el correcto, donde escucha PHP-FPM)
-#   fpm_fastcgi_wrong_port   -> puerto erroneo al que apunta el fastcgi_pass
-#                              del NGINX (9001: el error introducido)
-#   fpm_fastcgi_correct_port -> puerto correcto (donde escucha PHP-FPM)
+#                              (9000: donde escucha PHP-FPM)
+#   fpm_fastcgi_correct_port -> puerto donde escucha PHP-FPM
+#   fpm_fastcgi_backend_port -> puerto al que apunta el fastcgi_pass del NGINX
 #   fpm_sg_id / web_sg_id    -> identificadores de los security groups
 fpm_fastcgi_port=9000
-fpm_fastcgi_wrong_port=9001
 fpm_fastcgi_correct_port=9000
+fpm_fastcgi_backend_port=9001
 fpm_sg_id=sg-0000000000000000a
 web_sg_id=sg-0000000000000000b
 
