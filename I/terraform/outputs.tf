@@ -62,10 +62,10 @@ output "fpm_fastcgi_rule_id" {
 }
 
 
-output "fpm_fastcgi_backend_port" {
-  description = "Puerto al que apunta el fastcgi_pass del NGINX"
-  value       = var.fpm_fastcgi_backend_port
-}
+# output "fpm_fastcgi_backend_port" {
+#   description = "Puerto al que apunta el fastcgi_pass del NGINX"
+#   value       = var.fpm_fastcgi_backend_port
+# }
 
 # ---------------------------------------------------------------------------
 # Inventario de Ansible generado por Terraform
