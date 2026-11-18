@@ -1,0 +1,18 @@
+# application.py
+#
+# Aplicacion Flask minima (PoC).
+#
+# Flask es un "micro" framework: trae lo esencial (rutas, plantillas, datos) y
+# el resto se anade con extensiones (plugins). Aqui se aplica el patron MVC:
+#
+#   Modelo      -> los datos de la aplicacion (aqui estan en el codigo)
+#   Vista       -> la presentacion en HTML
+#   Controlador -> la gestion de las peticiones (las funciones @app.route)
+from flask import Flask
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def index():
+    return "<h1>Mi aplicacion Flask</h1><p>Desplegada con Nginx + Gunicorn</p>"

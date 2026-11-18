@@ -1,0 +1,24 @@
+---
+# ---------------------------------------------------------------------------
+# Prueba REAL del socket de una aplicacion, llamandola COMO el usuario de
+# Nginx ({{ nginx_user }}).
+#
+# Se hace COMO {{ nginx_user }}, no como root: si se hiciera como root
+# pasaria siempre y no serviria de nada.
+#
+# Esta tarea SOLO informa del resultado observado. No interpreta el error ni
+# sugiere la causa: el diagnostico es parte del trabajo del alumno.
+# ---------------------------------------------------------------------------
+
+- name: Consultar el socket {{ app.socket }}
+  ansible.builtin.shell: |
+    curl -sS --fail --unix-socket {{ app.socket }} http://localhost/ 2>&1 \
+      | head -c 200 || echo "SIN RESPUESTA"
+  register: socket_curl_check
+  changed_when: false
+  become: true
+  become_user: "{{ nginx_user }}"
+
+- name: Informar del resultado de la consulta al socket {{ app.socket }}
+  ansible.builtin.debug:
+    msg: "{{ app.socket }} -> {{ socket_curl_check.stdout | trim }}"

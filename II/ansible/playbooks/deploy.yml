@@ -1,0 +1,123 @@
+---
+# ===========================================================================
+# Despliegue del escenario p3.5-flask con Ansible
+#
+# Topologia: UNA maquina con Nginx y las DOS aplicaciones Flask (mi_app y
+# atletismo), cada una con su servicio systemd, su socket Unix y su virtual
+# host.
+#
+# Uso habitual (el inventario lo genera Terraform):
+#
+#   ansible-playbook playbooks/deploy.yml -i inventory/hosts.ini
+# ===========================================================================
+
+- name: Preparacion comun (paquetes, uv, cloud-init)
+  hosts: flask
+  become: true
+  gather_facts: true
+  roles:
+    - role: common
+      tags: [common, always]
+
+- name: Usuario de servicio flask y estructura de directorios
+  hosts: flask
+  become: true
+  gather_facts: false
+  tags: [flask_user, deploy]
+  roles:
+    - role: flask_user
+      tags: [flask_user, deploy]
+
+- name: Desplegar las aplicaciones Flask y sus entornos virtuales
+  hosts: flask
+  become: true
+  gather_facts: true
+  tags: [apps, deploy]
+  vars:
+    secret_key: >-
+      {{ lookup('ansible.builtin.password',
+                '/dev/null length=48 chars=ascii_letters,digits') }}
+  roles:
+    - role: flask_apps
+      tags: [apps, deploy]
+
+- name: Crear las unidades de servicio y los sockets de Gunicorn
+  hosts: flask
+  become: true
+  gather_facts: false
+  tags: [gunicorn, deploy]
+  roles:
+    - role: gunicorn
+      tags: [gunicorn, deploy]
+
+- name: Configurar NGINX como proxy inverso
+  hosts: flask
+  become: true
+  gather_facts: false
+  tags: [nginx, deploy]
+  roles:
+    - role: nginx
+      tags: [nginx, deploy]
+
+# ---------------------------------------------------------------------------
+# Preparacion final del escenario.
+#
+# Las tareas del rol debug_scenarios se aplican siempre (no llevan ninguna
+# etiqueta que permita saltarlas con --skip-tags) y no existe ninguna forma
+# de revertirlas desde la automatizacion.
+# ---------------------------------------------------------------------------
+- name: Preparacion del escenario p3.5-flask-debug
+  hosts: flask
+  become: true
+  gather_facts: false
+  roles:
+    - role: debug_scenarios
+
+# ---------------------------------------------------------------------------
+# Verificacion final: las dos aplicaciones se sirven a traves de Nginx.
+#
+# Esta tarea SOLO informa del codigo de estado observado. No falla ni
+# interpreta el resultado: el diagnostico es parte del trabajo del alumno.
+# ---------------------------------------------------------------------------
+- name: Verificacion del despliegue
+  hosts: flask
+  become: true
+  gather_facts: false
+  tags: [verify, deploy]
+  tasks:
+    - name: Comprobar el codigo de estado HTTP de cada virtual host
+      ansible.builtin.uri:
+        url: "http://127.0.0.1/"
+        headers:
+          Host: "{{ item.hostname }}"
+        status_code: [200, 301, 302, 400, 403, 404, 500, 502, 503]
+        timeout: 15
+      register: site_check
+      failed_when: false
+      changed_when: false
+      loop: "{{ flask_apps }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Mostrar el codigo de estado de cada virtual host
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.item.hostname }} -> HTTP
+          {{ item.status | default('sin respuesta') }}
+      loop: "{{ site_check.results }}"
+      loop_control:
+        label: "{{ item.item.hostname }}"
+
+    - name: Mostrar el resumen del despliegue
+      ansible.builtin.debug:
+        msg:
+          - "ESCENARIO p3.5-flask DESPLEGADO"
+          - "mi_app      -> http://{{ flask_public_ip | default(ansible_host) }}/ (Host: flask-app.local)"
+          - "atletismo  -> http://{{ flask_public_ip | default(ansible_host) }}/ (Host: atletismo.local)"
+          - ""
+          - "Prueba las dos aplicaciones:"
+          - "  curl -H 'Host: flask-app.local' http://{{ flask_public_ip | default(ansible_host) }}/"
+          - "  curl -H 'Host: atletismo.local' http://{{ flask_public_ip | default(ansible_host) }}/"
+          - ""
+          - "Para usarlas por nombre, anade en el /etc/hosts de TU maquina:"
+          - "  {{ flask_public_ip | default(ansible_host) }} flask-app.local atletismo.local"

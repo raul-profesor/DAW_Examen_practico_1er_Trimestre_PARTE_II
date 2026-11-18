@@ -1,0 +1,117 @@
+---
+# ---------------------------------------------------------------------------
+# Variables comunes del escenario p3.5-flask
+#
+# Topologia: UNA maquina con Nginx y las DOS aplicaciones Flask. Cada
+# aplicacion tiene su propio servicio systemd, su propio socket Unix y su
+# propio virtual host.
+# ---------------------------------------------------------------------------
+
+# --- Identificacion del despliegue -----------------------------------------
+project_name: flask-p35
+# OJO: "environment" es un nombre reservado en Ansible, por eso la variable
+# del escenario se llama "deploy_scenario".
+deploy_scenario: p3.5-flask-debug
+
+# --- Paquetes base ----------------------------------------------------------
+python3_packages:
+  - python3
+  - python3-venv
+  - python3-pip
+  - ca-certificates
+  - curl
+  - git
+  - rsync
+
+nginx_package: nginx
+
+# --- Usuario de servicio ----------------------------------------------------
+# Usuario de SISTEMA, sin shell y sin permisos reales. La aplicacion NUNCA
+# se ejecuta como root ni como el usuario personal.
+flask_user: flask
+flask_group: flask
+flask_home: /opt/flask
+flask_shell: /usr/sbin/nologin
+
+# Grupo al que hay que anadir a www-data para que Nginx pueda conectarse al
+# socket Unix.
+flask_socket_group: flask
+nginx_user: www-data
+
+# --- Estructura de directorios ----------------------------------------------
+apps_root: "{{ flask_home }}/apps"
+
+# --- uv ---------------------------------------------------------------------
+# OJO: uv DEBE estar en /usr/local/bin, no en ~/.local/bin. Motivos:
+#   1) sudo sustituye el PATH por su secure_path, que no incluye
+#      ~/.local/bin  ->  "sudo: uv: command not found"
+#   2) el home del usuario suele tener permisos 700, asi que el usuario
+#      flask no puede atravesarlo  ->  "Permission denied"
+uv_install_dir: /usr/local/bin
+uv_version: "0.9.7"
+# OJO: es un archivo TAR.GZ, no un binario suelto. El rol lo descomprime y
+# busca dentro el ejecutable "uv".
+uv_binary_url: "https://github.com/astral-sh/uv/releases/download/{{ uv_version }}/uv-x86_64-unknown-linux-gnu.tar.gz"
+uv_binary_name: uv
+
+# Version de Python para el entorno virtual.
+python_version: "3.12"
+
+# --- Gunicorn ----------------------------------------------------------------
+gunicorn_workers: 4
+gunicorn_timeout: 30
+gunicorn_graceful_timeout: 30
+# Umask con el que se crea el socket Unix.
+gunicorn_umask: "0007"
+gunicorn_timeout_restart: 5
+
+# Gunicorn 25.1+ crea un socket de control (para la herramienta "gunicornc")
+# en el HOME del usuario, que con ProtectHome/ProtectSystem no es escribible.
+# El error en el journal es "Control server error: [Errno 30] Read-only file
+# system" y NO es fatal, pero "--no-control-socket" lo evita.
+gunicorn_no_control_socket: true
+
+# --- Aplicaciones ------------------------------------------------------------
+# Las dos aplicaciones se describen aqui como DATOS, de modo que los roles
+# generan (con un unico loop) las unidades systemd, los virtual hosts, los
+# sockets y las verificaciones.
+flask_apps:
+  # ---- Aplicacion PoC: los ficheros se escriben con plantillas Jinja2 ----
+  - name: mi_app
+    kind: poc
+    service: flask-app
+    service_description: "Mi aplicacion Flask servida por Gunicorn"
+    runtime_dir: flask-app
+    socket: /run/flask-app/mi_app.sock
+    hostname: flask-app.local
+    static_alias: "{{ apps_root }}/mi_app/static/"
+    wsgi_target: "wsgi:app"
+    git_repo: ""
+    git_branch: main
+    git_ref: ""
+    requirements_file: ""
+    pip_packages:
+      - flask
+      - gunicorn
+
+  # ---- Aplicacion real: se clona de GitHub -------------------------------
+  - name: atletismo
+    kind: git
+    service: flask-atletismo
+    service_description: "Records de atletismo (Flask + Gunicorn)"
+    runtime_dir: flask-atletismo
+    socket: /run/flask-atletismo/atletismo.sock
+    hostname: atletismo.local
+    # OJO: los estaticos de esta app viven un nivel mas profundo, en
+    # app/static/. Un alias mal escrito devuelve 404 en todos los CSS.
+    static_alias: "{{ apps_root }}/atletismo/app/static/"
+    wsgi_target: "wsgi:app"
+    git_repo: https://github.com/raul-profesor/atletismo-records
+    git_branch: main
+    git_ref: ""
+    requirements_file: requirements.txt
+    pip_packages: []
+
+# --- Comprobaciones ----------------------------------------------------------
+# Host que se usa en las pruebas HTTP con curl (--resolve).
+site_hostname: flask-app.local

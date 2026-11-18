@@ -1,0 +1,31 @@
+---
+# ---------------------------------------------------------------------------
+# Despliegue de los ficheros de la aplicacion PoC.
+#
+# Se incluye una vez por aplicacion PoC (ver include_tasks en main.yml), asi
+# que "app" es la aplicacion que se despliega.
+#
+# La PoC se compone de DOS ficheros:
+#   - application.py: la aplicacion Flask (el codigo del desarrollador)
+#   - wsgi.py:       el punto de entrada WSGI (lo que consume Gunicorn)
+#
+# OJO: si se desplegara solo uno de los dos, el servicio fallaria con
+# "ModuleNotFoundError: No module named 'application'".
+# ---------------------------------------------------------------------------
+
+- name: Desplegar los ficheros de la aplicacion PoC {{ app.name }}
+  ansible.builtin.template:
+    src: "{{ poc_file.src }}"
+    dest: "{{ apps_root }}/{{ app.name }}/{{ poc_file.dest }}"
+    owner: "{{ flask_user }}"
+    group: "{{ flask_group }}"
+    mode: "0644"
+  become: true
+  loop: "{{ poc_files }}"
+  loop_control:
+    # Se indica el nombre de la variable del bucle de forma explicita: dentro
+    # de un "include_tasks" con loop, Ansible no lo deduce de forma fiable.
+    loop_var: poc_file
+    # OJO: el "label" NO puede referenciar la variable del bucle, porque se
+    # evalua ANTES de que exista. Se deja el label por defecto.
+    extended: false

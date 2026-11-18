@@ -1,16 +1,27 @@
+# ---------------------------------------------------------------------------
+# Este repositorio contiene VARIOS escenarios, cada uno en su directorio:
+#
+#   I/    -> escenario NGINX + PHP-FPM (v3-debug)
+#   II/   -> escenario Flask + Gunicorn + Nginx (p3.5)
+#
+# Cada escenario tiene su propio terraform/, ansible/ y Makefile. Los
+# patrones de este fichero se aplican a TODOS ellos, asi que se anteponen
+# "*/" para que sirvan dentro de cualquier subdirectorio de escenario.
+# ---------------------------------------------------------------------------
+
 # --- Terraform ---
-terraform/.terraform/
-terraform/.ssh/
-terraform/*.tfstate
-terraform/*.tfstate.*
-terraform/crash.log
-terraform/crash.*.log
-# terraform/.terraform.lock.hcl SI se versiona (fija las versiones de los providers)
+*/terraform/.terraform/
+*/terraform/.ssh/
+*/terraform/*.tfstate
+*/terraform/*.tfstate.*
+*/terraform/crash.log
+*/terraform/crash.*.log
+# */terraform/.terraform.lock.hcl SI se versiona (fija las versiones de los providers)
 
 # --- Ansible ---
-ansible/inventory/hosts.ini
-ansible/.retry
-ansible/*.retry
+*/ansible/inventory/hosts.ini
+*/ansible/.retry
+*/ansible/*.retry
 
 # --- Claves y credenciales ---
 *.pem
@@ -21,7 +32,7 @@ ansible/*.retry
 !.env.example
 
 # --- Documentacion privada (solo para el profesor) ---
-docs/privado/
+*/docs/privado/
 
 # --- Sistema operativo y editores ---
 .DS_Store

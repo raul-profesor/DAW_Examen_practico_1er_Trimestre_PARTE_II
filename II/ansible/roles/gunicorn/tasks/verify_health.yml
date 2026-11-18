@@ -1,0 +1,19 @@
+---
+# ---------------------------------------------------------------------------
+# Sonda de salud de una aplicacion.
+#
+# La aplicaion de atletismo expone /health, pensado para engancharla a
+# systemd. Devuelve {"estado": "ok", "records": 19}.
+# ---------------------------------------------------------------------------
+
+- name: Consultar la sonda de salud
+  ansible.builtin.shell: |
+    curl -sS --fail --unix-socket {{ app.socket }} http://localhost/health || echo "SIN_SONDA"
+  register: health_check
+  changed_when: false
+  become: true
+  become_user: "{{ nginx_user }}"
+
+- name: Mostrar la sonda de salud
+  ansible.builtin.debug:
+    msg: "{{ app.name }} /health -> {{ health_check.stdout | trim }}"

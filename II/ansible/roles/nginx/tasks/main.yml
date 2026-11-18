@@ -1,0 +1,97 @@
+---
+# ---------------------------------------------------------------------------
+# Rol nginx: instala Nginx, despliega un virtual host por aplicacion y
+# valida la sintaxis.
+#
+# Cada virtual host es un proxy inverso que envia las peticiones a Gunicorn
+# por un SOCKET UNIX (no por TCP), porque Nginx y Gunicorn estan en la misma
+# maquina.
+# ---------------------------------------------------------------------------
+
+- name: Instalar NGINX
+  ansible.builtin.apt:
+    name: "{{ nginx_package }}"
+    state: present
+    update_cache: true
+  become: true
+
+- name: Desplegar el script de validacion de la sintaxis de NGINX
+  ansible.builtin.copy:
+    src: validate-nginx.sh
+    dest: /tmp/validate-nginx.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Desplegar el virtual host de {{ item.name }}
+  ansible.builtin.template:
+    src: vhost.conf.j2
+    dest: "{{ nginx_config_dir }}/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: >-
+      /tmp/validate-nginx.sh %s
+  become: true
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Recargar NGINX
+
+- name: Activar el sitio (crear enlace simbolico)
+  ansible.builtin.file:
+    src: "{{ nginx_config_dir }}/{{ item.name }}"
+    dest: "{{ nginx_enabled_dir }}/{{ item.name }}"
+    state: link
+  become: true
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Recargar NGINX
+
+- name: Desactivar el sitio por defecto de Ubuntu
+  ansible.builtin.file:
+    path: "{{ nginx_enabled_dir }}/default"
+    state: absent
+  become: true
+  notify: Recargar NGINX
+
+- name: Verificar la sintaxis de la configuracion de NGINX
+  ansible.builtin.command:
+    cmd: nginx -t
+  changed_when: false
+  become: true
+  register: nginx_syntax_check
+  failed_when: nginx_syntax_check.rc != 0
+
+- name: Reiniciar NGINX
+  ansible.builtin.systemd:
+    name: "{{ nginx_package }}"
+    state: restarted
+  become: true
+
+- name: Comprobar que NGINX esta activo
+  ansible.builtin.systemd:
+    name: "{{ nginx_package }}"
+    state: started
+    enabled: true
+  become: true
+
+- name: Comprobar los grupos con los que corre el proceso worker de NGINX
+  ansible.builtin.shell: |
+    for pid in $(pgrep -x nginx); do
+      uid=$(awk '/^Uid:/{print $2}' /proc/$pid/status)
+      [ "$uid" = "0" ] && continue
+      gids=$(awk '/^Groups:/{print $2" "$3" "$4" "$5}' /proc/$pid/status)
+      for gid in $gids; do getent group "$gid" | cut -d: -f1; done | sort -u | tr "\n" " "
+      break
+    done
+  register: nginx_worker_groups
+  changed_when: false
+  become: true
+  check_mode: false
+
+- name: Informar de los grupos del proceso worker de NGINX
+  ansible.builtin.debug:
+    msg: "Grupos del worker de NGINX: {{ nginx_worker_groups.stdout | trim }}"

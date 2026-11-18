@@ -1,0 +1,134 @@
+---
+# ---------------------------------------------------------------------------
+# Rol common: prepara la maquina para el escenario Flask.
+#
+#   1. Actualiza los indices de paquetes e instala el software base
+#      (Python, git, nginx).
+#   2. Instala "uv" en /usr/local/bin (NO en ~/.local/bin).
+#   3. Espera a que cloud-init termine.
+# ---------------------------------------------------------------------------
+
+- name: Actualizar los indices de paquetes
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Instalar los paquetes base del escenario
+  ansible.builtin.apt:
+    name: "{{ python3_packages }}"
+    state: present
+  become: true
+
+- name: Instalar NGINX
+  ansible.builtin.apt:
+    name: "{{ nginx_package }}"
+    state: present
+  become: true
+
+- name: Esperar a que cloud-init termine
+  ansible.builtin.shell: |
+    cloud-init status --wait >/dev/null 2>&1 || true
+  changed_when: false
+
+# ---------------------------------------------------------------------------
+# Instalacion de "uv"
+#
+# uv sustituye a pip + venv + pipenv con una sola herramienta (Astral, los
+# creadores de ruff) y es entre 10 y 100 veces mas rapido.
+#
+# OJO: se instala en /usr/local/bin a proposito. Si se instala en el home del
+# usuario que ejecuta Ansible, "sudo -u flask uv ..." falla por dos motivos:
+#   1) sudo sustituye el PATH por su secure_path, que no incluye
+#      ~/.local/bin   ->  "sudo: uv: command not found"
+#   2) el home suele tener permisos 700, asi que el usuario flask no puede
+#      atravesarlo para llegar al binario   ->  "Permission denied"
+# ---------------------------------------------------------------------------
+
+- name: Comprobar si uv ya esta instalado
+  ansible.builtin.command:
+    cmd: "{{ uv_install_dir }}/{{ uv_binary_name }} --version"
+  register: uv_installed
+  changed_when: false
+  failed_when: false
+
+- name: Crear el directorio temporal de descarga de uv
+  ansible.builtin.file:
+    path: /tmp/uv-install
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Descargar el archivo de uv
+  ansible.builtin.get_url:
+    url: "{{ uv_binary_url }}"
+    dest: /tmp/uv-install/uv.tar.gz
+    mode: "0644"
+  become: true
+  when: uv_installed.rc | default(1) != 0
+
+# ---------------------------------------------------------------------------
+# OJO: el binario de uv se distribuye en un archivo TAR.GZ (no es un binario
+# suelto). Por eso hay que descomprimirlo y buscar dentro el ejecutable.
+#
+# El "find" con "-name uv" localiza el ejecutable dentro del arbol
+# descomprimido, en lugar de asumir una ruta concreta que puede cambiar entre
+# versiones.
+# ---------------------------------------------------------------------------
+
+- name: Descomprimir el archivo de uv
+  ansible.builtin.unarchive:
+    src: /tmp/uv-install/uv.tar.gz
+    dest: /tmp/uv-install
+    remote_src: true
+  become: true
+  when: uv_installed.rc | default(1) != 0
+
+- name: Localizar el ejecutable de uv dentro del archivo descomprimido
+  ansible.builtin.find:
+    paths: /tmp/uv-install
+    patterns: uv
+    file_type: file
+    recurse: true
+  register: uv_binary_found
+  become: true
+  when: uv_installed.rc | default(1) != 0
+
+- name: Verificar que se ha encontrado el ejecutable de uv
+  ansible.builtin.assert:
+    that:
+      - uv_binary_found.files | length > 0
+    fail_msg: >-
+      No se ha encontrado el ejecutable "uv" dentro del archivo descargado
+      ({{ uv_binary_url }}). Revisa la URL y la variable "uv_binary_url".
+    success_msg: "Ejecutable de uv localizado en {{ uv_binary_found.files[0].path }}"
+  when: uv_installed.rc | default(1) != 0
+
+- name: Instalar uv en {{ uv_install_dir }}
+  ansible.builtin.copy:
+    src: "{{ uv_binary_found.files[0].path }}"
+    dest: "{{ uv_install_dir }}/{{ uv_binary_name }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: uv_installed.rc | default(1) != 0
+
+- name: Limpiar el directorio temporal de descarga
+  ansible.builtin.file:
+    path: /tmp/uv-install
+    state: absent
+  become: true
+  when: uv_installed.rc | default(1) != 0
+
+- name: Comprobar la version de uv
+  ansible.builtin.command:
+    cmd: "{{ uv_install_dir }}/{{ uv_binary_name }} --version"
+  register: uv_version_check
+  changed_when: false
+  failed_when: uv_version_check.rc != 0
+
+- name: Mostrar la version de uv
+  ansible.builtin.debug:
+    msg: "uv instalado en {{ uv_install_dir }}: {{ uv_version_check.stdout }}"

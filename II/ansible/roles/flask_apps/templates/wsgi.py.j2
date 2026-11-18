@@ -1,0 +1,11 @@
+# wsgi.py
+#
+# Punto de entrada WSGI.
+#
+# Separa la APLICACION (lo que despliega el desarrollador) del PUNTO DE ENTRADA
+# que consume el servidor. Ademas, Gunicorn necesita una ruta de importacion
+# con dos componentes: "archivo:objeto". En este caso, "wsgi:app".
+from application import app
+
+# Gunicorn espera encontrar un objeto WSGI llamado 'app' en este modulo
+__all__ = ["app"]

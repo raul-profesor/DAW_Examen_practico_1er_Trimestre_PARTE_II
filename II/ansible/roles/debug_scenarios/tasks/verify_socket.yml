@@ -1,0 +1,41 @@
+---
+# ---------------------------------------------------------------------------
+# Verificacion de los PERMISOS del socket de una aplicacion.
+#
+# Se incluye una vez por aplicacion (ver include_tasks en main.yml), asi que
+# "app" es la aplicacion que se comprueba y cada "register" es el resultado
+# de esa ejecucion.
+#
+# Esta tarea SOLO informa del estado observado. No interpreta el resultado ni
+# sugiere la causa: el diagnostico es parte del trabajo del alumno.
+# ---------------------------------------------------------------------------
+
+- name: Mostrar los permisos del socket {{ app.socket }}
+  ansible.builtin.shell: |
+    stat -c '%A %U:%G %n' {{ app.socket }}
+  register: socket_stat
+  changed_when: false
+  become: true
+
+- name: Comprobar si {{ nginx_user }} puede escribir en el socket {{ app.socket }}
+  ansible.builtin.shell: |
+    test -w {{ app.socket }} && echo "SI" || echo "NO"
+  register: socket_write_check
+  changed_when: false
+  become: true
+  become_user: "{{ nginx_user }}"
+
+- name: Mostrar los grupos de {{ nginx_user }}
+  ansible.builtin.command:
+    cmd: "id -nG {{ nginx_user }}"
+  register: nginx_user_groups
+  changed_when: false
+  become: true
+  check_mode: false
+
+- name: Informar del estado del socket {{ app.socket }}
+  ansible.builtin.debug:
+    msg:
+      - "Socket: {{ socket_stat.stdout | trim }}"
+      - "Grupos de {{ nginx_user }}: {{ nginx_user_groups.stdout | trim }}"
+      - "{{ nginx_user }} puede escribir en el socket: {{ socket_write_check.stdout | trim }}"

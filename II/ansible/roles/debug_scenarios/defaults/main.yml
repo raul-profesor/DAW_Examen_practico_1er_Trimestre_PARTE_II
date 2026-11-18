@@ -1,0 +1,15 @@
+---
+# ---------------------------------------------------------------------------
+# Valores por defecto del rol debug_scenarios
+# ---------------------------------------------------------------------------
+
+# Usuario y grupo a los que se cambian los propietarios de los sockets Unix.
+#
+# El socket deja de pertenecer al usuario de servicio y pasa a pertenecer al
+# usuario "ubuntu", del que el usuario de Nginx no forma parte, asi que no
+# puede conectarse a el.
+debug_socket_owner: ubuntu
+debug_socket_group: ubuntu
+
+# Directorio donde estan los virtual hosts de NGINX.
+debug_nginx_config_dir: /etc/nginx/sites-available

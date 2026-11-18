@@ -1,0 +1,229 @@
+---
+# ---------------------------------------------------------------------------
+# Rol flask_apps: despliega el CODIGO de las dos aplicaciones y crea sus
+# entornos virtuales con "uv".
+#
+# Las dos aplicaciones se describen como DATOS en la variable "flask_apps"
+# (ver group_vars/all.yml), asi que este rol trabaja con un unico loop:
+#
+#   kind: poc  -> los ficheros se escriben con plantillas Jinja2
+#   kind: git  -> el codigo se clona de un repositorio de GitHub
+#
+# En ambos casos: se crea el venv con uv y se instalan las dependencias.
+# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# 1. CODIGO DE LAS APLICACIONES
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# La aplicacion PoC se compone de DOS ficheros: application.py (la aplicacion
+# Flask) y wsgi.py (el punto de entrada WSGI que consume Gunicorn).
+#
+# Se despliegan con un fichero de tareas aparte (poc.yml) que se incluye una
+# vez por aplicacion PoC, de modo que dentro se recorre la lista de ficheros
+# con un unico bucle.
+# ---------------------------------------------------------------------------
+
+- name: Desplegar los ficheros de la aplicacion PoC (kind=poc)
+  ansible.builtin.include_tasks: poc.yml
+  loop: "{{ flask_apps }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }}"
+  when: app.kind == 'poc'
+
+# ---------------------------------------------------------------------------
+# La aplicacion real: se clona de GitHub.
+#
+# Idempotencia: si el directorio ya tiene un clon (.git), se actualiza; si no,
+# se clona. Nunca se hace "force: true" sobre un clon existente, porque eso
+# borraria los cambios locales.
+# ---------------------------------------------------------------------------
+
+- name: Comprobar si la aplicacion ya esta desplegada
+  ansible.builtin.stat:
+    path: "{{ apps_root }}/{{ item.name }}/.git"
+  register: app_git_stat
+  become: true
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.kind == 'git'
+
+- name: Clonar el repositorio de la aplicacion
+  ansible.builtin.git:
+    repo: "{{ item.git_repo }}"
+    dest: "{{ apps_root }}/{{ item.name }}"
+    version: "{{ item.git_ref | default(item.git_branch, true) }}"
+    depth: 1
+    force: true
+  become: true
+  become_user: "{{ flask_user }}"
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.kind == 'git'
+    - not app_git_stat.stat.exists | default(false) | bool
+
+- name: Actualizar el codigo si la aplicacion ya estaba desplegada
+  ansible.builtin.git:
+    repo: "{{ item.git_repo }}"
+    dest: "{{ apps_root }}/{{ item.name }}"
+    version: "{{ item.git_ref | default(item.git_branch, true) }}"
+  become: true
+  become_user: "{{ flask_user }}"
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.kind == 'git'
+    - app_git_stat.stat.exists | default(false) | bool
+
+# ===========================================================================
+# 2. ENTORNO VIRTUAL
+#
+# OJO: se usa "sudo -u flask uv venv" (become_user), NO "sudo uv venv". Si
+# se usara "sudo uv venv" sin "-u flask", el entorno virtual quedaria
+# propiedad de root y el servicio systemd no podria usarlo.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# El entorno virtual se crea con un fichero aparte (venv.yml), una vez por
+# aplicacion, para poder comprobar dentro de el si ya existe.
+#
+# OJO: se comprueba la EXISTENCIA DEL DIRECTORIO ".venv", no la del binario
+# "gunicorn" que hay dentro. El binario solo aparece despues de instalar las
+# dependencias, asi que comprobarlo aqui haria que el venv se recreara en
+# cada ejecucion.
+# ---------------------------------------------------------------------------
+
+- name: Crear el entorno virtual de cada aplicacion
+  ansible.builtin.include_tasks: venv.yml
+  loop: "{{ flask_apps }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }}"
+
+# ===========================================================================
+# 3. DEPENDENCIAS
+#
+# OJO con "uv pip": busca hacia ARRIBA un pyproject.toml y, si lo encuentra,
+# instala en el entorno virtual de ESE proyecto en lugar del nuestro. Por eso
+# se fuerza con VIRTUAL_ENV.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Las dependencias se instalan con un fichero de tareas aparte (deps.yml) que
+# se incluye una vez por aplicacion. Asi, dentro de el, la comprobacion de
+# "gunicorn ya esta instalado" es trivial y no hace falta indexar los
+# resultados de un bucle.
+# ---------------------------------------------------------------------------
+
+- name: Instalar las dependencias de cada aplicacion
+  ansible.builtin.include_tasks: deps.yml
+  loop: "{{ flask_apps }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }}"
+
+# ---------------------------------------------------------------------------
+# Congelar las dependencias de la PoC.
+#
+# OJO con la redireccion ">": el simbolo ">" lo interpreta el SHELL del
+# usuario, no "sudo", asi que el fichero se intentaria abrir con el usuario
+# equivocado. La solucion es meter la redireccion DENTRO de "sh -c".
+# ---------------------------------------------------------------------------
+
+- name: Congelar las dependencias de la PoC en requirements.txt
+  ansible.builtin.shell: |
+    {{ uv_install_dir }}/{{ uv_binary_name }} pip freeze > requirements.txt
+  args:
+    chdir: "{{ apps_root }}/{{ item.name }}"
+    creates: "{{ apps_root }}/{{ item.name }}/requirements.txt"
+  become: true
+  become_user: "{{ flask_user }}"
+  environment:
+    VIRTUAL_ENV: "{{ apps_root }}/{{ item.name }}/.venv"
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.kind == 'poc'
+
+# ===========================================================================
+# 4. PERMISOS Y FICHEROS DE CONFIGURACION
+# ===========================================================================
+
+- name: Ajustar propietario y grupo de todo el arbol de la aplicacion
+  ansible.builtin.file:
+    path: "{{ apps_root }}/{{ item.name }}"
+    state: directory
+    owner: "{{ flask_user }}"
+    group: "{{ flask_group }}"
+    recurse: true
+  become: true
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Ajustar permisos de los directorios
+  ansible.builtin.shell: |
+    find {{ apps_root }}/{{ item.name }} -type d -not -path '*/.venv/*' -exec chmod 0755 {} \;
+  changed_when: false
+  become: true
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Ajustar permisos de los ficheros
+  # Se excluye el .env: contiene secretos y debe quedar en 0640.
+  ansible.builtin.shell: |
+    find {{ apps_root }}/{{ item.name }} -type f -not -path '*/.venv/*' -not -name '.env' -exec chmod 0644 {} \;
+  changed_when: false
+  become: true
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# ---------------------------------------------------------------------------
+# El .env se crea DESPUES de los chmod anteriores a proposito: contiene
+# secretos y su modo debe ser 0640 (lectura solo para el propietario y su
+# grupo), no el 0644 que se aplica a los ficheros normales.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# El .env se crea con un fichero aparte (env.yml), una vez por aplicacion.
+# ---------------------------------------------------------------------------
+
+- name: Crear el fichero .env de cada aplicacion
+  ansible.builtin.include_tasks: env.yml
+  loop: "{{ flask_apps }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }}"
+
+# ===========================================================================
+# 5. VERIFICACION
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# La verificacion recorre las aplicaciones con un unico loop. El "register"
+# de una tarea con loop guarda una LISTA de resultados, asi que para el
+# assert se indexa con "loop.index0" (el indice de la iteracion actual).
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# La verificacion se delega en un fichero aparte (verify.yml) que se incluye
+# UNA VEZ POR APLICACION. Asi cada tarea se ejecuta con un unico "app" y su
+# "register" es el resultado de ESA ejecucion (no una lista), que es lo que
+# necesita el assert. Es la forma estandar de evitar el indexado de
+# resultados en Ansible.
+# ---------------------------------------------------------------------------
+
+- name: Verificar cada aplicacion
+  ansible.builtin.include_tasks: verify.yml
+  loop: "{{ flask_apps }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }}"

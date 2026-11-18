@@ -1,0 +1,43 @@
+{#-
+  ---------------------------------------------------------------------------
+  Plantilla del virtual host de NGINX (proxy inverso hacia un socket Unix).
+
+  Por cada aplicacion hay un virtual host propio, con su propio nombre, sus
+  propios logs y su propio socket.
+  ---------------------------------------------------------------------------
+-#}
+server {
+
+    listen 80;
+    listen [::]:80;
+
+    server_name {{ item.hostname }};
+
+    server_tokens off;
+    client_max_body_size 10m;
+
+    access_log /var/log/nginx/{{ item.name }}.access.log;
+    error_log  /var/log/nginx/{{ item.name }}.error.log;
+
+    # Los ficheros estaticos los sirve Nginx directamente, sin pasar por Gunicorn
+    location /static/ {
+        alias {{ item.static_alias }};
+        expires 30d;
+        access_log off;
+    }
+
+    location / {
+        # Proxy inverso hacia el socket Unix de Gunicorn
+        proxy_pass http://unix:{{ item.socket }};
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+
+        proxy_connect_timeout 5s;
+        proxy_read_timeout    60s;
+    }
+}

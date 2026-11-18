@@ -1,0 +1,27 @@
+# ==========================================================
+# Inventario estatico de ejemplo (formato INI)
+#
+# SOLO se usa si prefieres gestionar las IPs a mano (por ejemplo, si ya
+# tienes la instancia creada desde la consola de AWS). En ese caso:
+#
+#   1. Copia este fichero a inventory/hosts.ini
+#   2. Sustituye la IP por la real
+#   3. No ejecutes `terraform apply` (o hazlo con -target="" para no tocar
+#      la instancia)
+#
+# El inventario generado por Terraform tiene el mismo formato.
+# ==========================================================
+
+[all:vars]
+scenario=p3.5-flask
+flask_public_ip=192.0.2.10
+flask_private_ip=10.0.0.10
+
+[flask]
+# IP publica de la instancia con Nginx y las dos aplicaciones Flask
+192.0.2.10 ansible_host=192.0.2.10
+
+[flask:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=../terraform/.ssh/flask-p35-p3.5-flask.pem
+ansible_python_interpreter=/usr/bin/python3

@@ -1,0 +1,50 @@
+---
+# ---------------------------------------------------------------------------
+# Instalacion de las dependencias de UNA aplicacion.
+#
+# Se incluye una vez por aplicacion (ver include_tasks en main.yml), asi que
+# "app" es la aplicacion de la que se ocupamos.
+#
+# La comprobacion previa de "gunicorn ya instalado" hace que el playbook sea
+# idempotente: una segunda ejecucion no vuelve a reinstalar nada.
+# ---------------------------------------------------------------------------
+
+- name: Comprobar si gunicorn ya esta instalado en el entorno virtual
+  ansible.builtin.stat:
+    path: "{{ apps_root }}/{{ app.name }}/.venv/bin/gunicorn"
+  register: gunicorn_installed
+  become: true
+
+# OJO: el modulo "command" NO admite el parametro "environment" (solo lo
+# admite "shell"), asi que la variable VIRTUAL_ENV se define con "env"
+# dentro del propio comando.
+#
+# VIRTUAL_ENV es imprescindible: "uv pip" busca hacia ARRIBA un
+# pyproject.toml y, si lo encuentra, instala en el entorno virtual de ESE
+# proyecto en lugar del nuestro.
+
+- name: Instalar las dependencias declaradas en requirements.txt
+  ansible.builtin.command:
+    cmd: >-
+      env VIRTUAL_ENV={{ apps_root }}/{{ app.name }}/.venv
+      {{ uv_install_dir }}/{{ uv_binary_name }} pip install -r {{ app.requirements_file }}
+    chdir: "{{ apps_root }}/{{ app.name }}"
+  become: true
+  become_user: "{{ flask_user }}"
+  when:
+    - app.kind == 'git'
+    - app.requirements_file | length > 0
+    - not gunicorn_installed.stat.exists
+
+- name: Instalar los paquetes sueltos (PoC)
+  ansible.builtin.command:
+    cmd: >-
+      env VIRTUAL_ENV={{ apps_root }}/{{ app.name }}/.venv
+      {{ uv_install_dir }}/{{ uv_binary_name }} pip install {{ app.pip_packages | join(' ') }}
+    chdir: "{{ apps_root }}/{{ app.name }}"
+  become: true
+  become_user: "{{ flask_user }}"
+  when:
+    - app.kind == 'poc'
+    - app.pip_packages | length > 0
+    - not gunicorn_installed.stat.exists

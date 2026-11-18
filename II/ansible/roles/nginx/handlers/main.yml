@@ -1,0 +1,7 @@
+---
+- name: Recargar NGINX
+  ansible.builtin.systemd:
+    name: "{{ nginx_package }}"
+    state: reloaded
+  become: true
+  listen: Recargar NGINX

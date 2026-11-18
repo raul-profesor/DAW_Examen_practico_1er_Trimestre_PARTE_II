@@ -1,0 +1,8 @@
+---
+# ---------------------------------------------------------------------------
+# Variables especificas del grupo "flask"
+#
+# En este escenario TODAS las aplicaciones (mi_app y atletismo) viven en la
+# misma maquina, junto con Nginx. No hay variables adicionales: las dos apps
+# se describen en group_vars/all.yml.
+# ---------------------------------------------------------------------------

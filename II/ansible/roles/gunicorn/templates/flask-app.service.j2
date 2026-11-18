@@ -1,0 +1,74 @@
+[Unit]
+Description={{ item.service_description }}
+After=network.target
+
+[Service]
+Type=simple
+User={{ flask_user }}
+Group={{ flask_group }}
+
+WorkingDirectory={{ apps_root }}/{{ item.name }}
+
+# El PATH empieza por el venv, para que 'gunicorn' sea el del entorno virtual
+Environment="PATH={{ apps_root }}/{{ item.name }}/.venv/bin"
+
+# Variables de entorno de la aplicacion (el '-' evita que falle si no existe)
+EnvironmentFile=-{{ apps_root }}/{{ item.name }}/.env
+
+ExecStart={{ apps_root }}/{{ item.name }}/.venv/bin/gunicorn \
+    --workers {{ gunicorn_workers }} \
+    --bind unix:{{ item.socket }} \
+    --umask {{ gunicorn_umask }} \
+    --access-logfile - \
+    --error-logfile - \
+    --timeout {{ gunicorn_timeout }} \
+    --graceful-timeout {{ gunicorn_graceful_timeout }} \
+    {% if gunicorn_no_control_socket | default(true) %}--no-control-socket \
+    {% endif %}{{ item.wsgi_target }}
+
+# Recarga sin downtime: HUP hace que Gunicorn reinicie los workers
+ExecReload=/bin/kill -s HUP $MAINPID
+
+Restart=always
+RestartSec={{ gunicorn_timeout_restart }}
+KillSignal=SIGQUIT
+TimeoutStopSec={{ gunicorn_graceful_timeout }}
+
+# Directorio de runtime: /run/{{ item.runtime_dir }}, con el usuario del servicio.
+#
+# OJO: un RuntimeDirectory POR SERVICIO, nunca compartido. Si las dos
+# aplicaciones declararan el mismo, al parar una systemd borraria el socket
+# de la otra (que se quedaria con un 502 sin explicacion), y al arrancar el
+# "chown -R" de systemd reasignaria la propiedad de los sockets ajenos.
+RuntimeDirectory={{ item.runtime_dir }}
+
+# 0755: Nginx debe poder RECORRER el directorio para llegar al socket.
+# Con 0750, Nginx recibe EACCES y responde 502 Bad Gateway.
+RuntimeDirectoryMode=0755
+
+# Gunicorn 25.1+ intenta crear un socket de control para sus comandos de
+# administracion (la herramienta "gunicornc"). Lo crea en el HOME del
+# usuario, que con ProtectHome=true y ProtectSystem=strict no es escribible,
+# y el journal muestra:
+#   [ERROR] Control server error: [Errno 30] Read-only file system
+# No es fatal (el servicio sigue funcionando), pero se evita con la opcion
+# "--no-control-socket" del ExecStart de arriba.
+#
+# OJO: NO se usa la directiva "ControlSocket=" de systemd para esto, porque
+# solo existe a partir de systemd 256 y Ubuntu 24.04 usa systemd 255 (que la
+# ignora con un aviso en el journal).
+#
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

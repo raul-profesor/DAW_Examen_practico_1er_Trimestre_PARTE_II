@@ -1,0 +1,32 @@
+---
+# ---------------------------------------------------------------------------
+# Verificacion del despliegue de UNA aplicacion.
+#
+# Este fichero se incluye una vez por aplicacion (ver include_tasks en
+# main.yml), asi que "app" es la aplicacion que se esta comprobando y cada
+# "register" es el resultado de ESA ejecucion.
+# ---------------------------------------------------------------------------
+
+- name: Comprobar que existe el punto de entrada WSGI
+  ansible.builtin.stat:
+    path: "{{ apps_root }}/{{ app.name }}/wsgi.py"
+  register: wsgi_stat
+  become: true
+
+- name: Comprobar que existe el ejecutable de gunicorn en el venv
+  ansible.builtin.stat:
+    path: "{{ apps_root }}/{{ app.name }}/.venv/bin/gunicorn"
+  register: gunicorn_bin_stat
+  become: true
+
+- name: Comprobar que la aplicacion esta desplegada correctamente
+  ansible.builtin.assert:
+    that:
+      - wsgi_stat.stat.exists
+      - gunicorn_bin_stat.stat.exists
+    fail_msg: >-
+      La aplicacion {{ app.name }} no esta bien desplegada en
+      {{ apps_root }}/{{ app.name }}. Se esperaba encontrar wsgi.py y
+      .venv/bin/gunicorn. Revisa el clon del repositorio y la creacion
+      del entorno virtual.
+    success_msg: "Aplicacion {{ app.name }} desplegada en {{ apps_root }}/{{ app.name }}"

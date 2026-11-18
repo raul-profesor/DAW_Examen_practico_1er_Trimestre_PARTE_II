@@ -1,0 +1,71 @@
+---
+# ---------------------------------------------------------------------------
+# Rol gunicorn: crea las unidades de servicio systemd y verifica los
+# permisos del socket Unix.
+#
+# Hay UNA unidad por aplicacion, generadas desde una unica plantilla. Cada
+# una con su propio RuntimeDirectory, su propio socket y su propio nombre de
+# servicio.
+# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# 1. UNIDADES DE SERVICIO
+# ===========================================================================
+
+- name: Desplegar la unidad de servicio de {{ item.service }}
+  ansible.builtin.template:
+    src: flask-app.service.j2
+    dest: "/etc/systemd/system/{{ item.service }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.service }}"
+  notify: Recargar systemd
+
+- name: Recargar la configuracion de systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Habilitar y arrancar el servicio {{ item.service }}
+  ansible.builtin.systemd:
+    name: "{{ item.service }}"
+    state: started
+    enabled: true
+  become: true
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.service }}"
+
+# ===========================================================================
+# 2. ESPERAR A QUE APAREZCA EL SOCKET
+# ===========================================================================
+
+- name: Esperar a que aparezca el socket {{ item.socket }}
+  ansible.builtin.shell: |
+    for i in $(seq 1 30); do
+      [ -S {{ item.socket }} ] && exit 0
+      sleep 1
+    done
+    echo "TIMEOUT: el socket {{ item.socket }} no aparecio" >&2
+    exit 1
+  changed_when: false
+  become: true
+  loop: "{{ flask_apps }}"
+  loop_control:
+    label: "{{ item.socket }}"
+
+# ===========================================================================
+# 3. SONDAS DE SALUD
+# ===========================================================================
+
+- name: Comprobar la sonda de salud de {{ item.name }}
+  ansible.builtin.include_tasks: verify_health.yml
+  loop: "{{ flask_apps }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }}"
+  when: app.name == 'atletismo'

@@ -1,0 +1,25 @@
+---
+# ---------------------------------------------------------------------------
+# Creacion del entorno virtual de UNA aplicacion.
+#
+# Se incluye una vez por aplicacion (ver include_tasks en main.yml), asi que
+# "app" es la aplicacion de la que se ocupamos.
+#
+# OJO: se usa "become_user" (equivale a "sudo -u flask uv venv") y NO
+# "sudo uv venv". Si el entorno virtual se creara como root, el servicio
+# systemd no podria usarlo.
+# ---------------------------------------------------------------------------
+
+- name: Comprobar si el entorno virtual ya existe
+  ansible.builtin.stat:
+    path: "{{ apps_root }}/{{ app.name }}/.venv"
+  register: venv_stat
+  become: true
+
+- name: Crear el entorno virtual con uv
+  ansible.builtin.command:
+    cmd: "{{ uv_install_dir }}/{{ uv_binary_name }} venv --python {{ python_version }}"
+    chdir: "{{ apps_root }}/{{ app.name }}"
+  become: true
+  become_user: "{{ flask_user }}"
+  when: not venv_stat.stat.exists | default(false) | bool

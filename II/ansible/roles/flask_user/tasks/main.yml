@@ -1,0 +1,85 @@
+---
+# ---------------------------------------------------------------------------
+# Rol flask_user: crea el usuario de servicio y prepara los directorios.
+# ---------------------------------------------------------------------------
+
+- name: Crear el grupo de sistema {{ flask_group }}
+  ansible.builtin.group:
+    name: "{{ flask_group }}"
+    system: true
+    state: present
+  become: true
+
+- name: Crear el usuario de servicio flask (sin shell, sin home utilizable)
+  ansible.builtin.user:
+    name: "{{ flask_user }}"
+    group: "{{ flask_group }}"
+    home: "{{ flask_home }}"
+    shell: "{{ flask_shell }}"
+    system: true
+    create_home: true
+    comment: "Servicio de las aplicaciones Flask"
+  become: true
+
+- name: Comprobar el grupo primario del usuario flask
+  ansible.builtin.shell: |
+    getent passwd {{ flask_user }} | cut -d: -f4 | xargs -r -I{} getent group {} | cut -d: -f1
+  register: flask_primary_group
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Informar del grupo primario del usuario {{ flask_user }}
+  ansible.builtin.debug:
+    msg: "Grupo primario de {{ flask_user }}: {{ flask_primary_group.stdout | trim }}"
+
+- name: Comprobar si {{ nginx_user }} ya pertenece al grupo {{ flask_socket_group }}
+  ansible.builtin.command:
+    cmd: "id -nG {{ nginx_user }}"
+  register: nginx_groups_before
+  changed_when: false
+  check_mode: false
+
+- name: Anadir {{ nginx_user }} al grupo {{ flask_socket_group }}
+  ansible.builtin.command:
+    cmd: "usermod -aG {{ flask_socket_group }} {{ nginx_user }}"
+  become: true
+  when: flask_socket_group not in nginx_groups_before.stdout.split()
+
+- name: Comprobar los grupos de {{ nginx_user }} despues del cambio
+  ansible.builtin.command:
+    cmd: "id -nG {{ nginx_user }}"
+  register: nginx_groups_after
+  changed_when: false
+  check_mode: false
+
+- name: Informar de los grupos de {{ nginx_user }}
+  ansible.builtin.debug:
+    msg: "Grupos de {{ nginx_user }}: {{ nginx_groups_after.stdout | trim }}"
+
+# ---------------------------------------------------------------------------
+# Estructura de directorios
+# ---------------------------------------------------------------------------
+
+- name: Crear el directorio base de las aplicaciones
+  ansible.builtin.file:
+    path: "{{ apps_root }}"
+    state: directory
+    owner: "{{ flask_user }}"
+    group: "{{ flask_group }}"
+    mode: "0755"
+  become: true
+
+- name: Crear el directorio de cada aplicacion
+  ansible.builtin.file:
+    path: "{{ apps_root }}/{{ item.name }}"
+    state: directory
+    owner: "{{ flask_user }}"
+    group: "{{ flask_group }}"
+    mode: "0755"
+  become: true
+  loop: "{{ flask_apps }}"
+
+- name: Mostrar la estructura creada
+  ansible.builtin.debug:
+    msg: "Aplicaciones en {{ apps_root }}: {{ flask_apps | map(attribute='name') | join(', ') }}"

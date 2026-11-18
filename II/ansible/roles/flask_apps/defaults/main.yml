@@ -1,0 +1,18 @@
+---
+# ---------------------------------------------------------------------------
+# Valores por defecto del rol flask_apps
+# ---------------------------------------------------------------------------
+
+# Ficheros que componen la aplicacion PoC (kind=poc).
+#
+# La PoC son DOS ficheros:
+#   - application.py: la aplicacion Flask
+#   - wsgi.py:       el punto de entrada WSGI que consume Gunicorn ("wsgi:app")
+#
+# Los dos son necesarios: sin wsgi.py, Gunicorn no encuentra el objeto WSGI;
+# sin application.py, el import de wsgi.py falla.
+poc_files:
+  - src: "application.py.j2"
+    dest: "application.py"
+  - src: "wsgi.py.j2"
+    dest: "wsgi.py"

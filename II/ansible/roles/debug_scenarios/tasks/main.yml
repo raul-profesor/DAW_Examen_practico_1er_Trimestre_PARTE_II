@@ -1,0 +1,102 @@
+---
+# ---------------------------------------------------------------------------
+# Rol debug_scenarios: deja el escenario en el estado que hay que
+# diagnosticar.
+#
+# Se ejecuta AL FINAL del despliegue, cuando las unidades de servicio ya
+# estan escritas y los sockets ya existen.
+#
+# Aqui es donde se prepara el escenario para que el alumno tenga algo que
+# encontrar.
+#
+# IMPORTANTE: este rol no tiene ninguna forma de "revertir" las operaciones.
+# El escenario se despliega de una unica manera: con las tareas aplicadas.
+# Que el alumno las diagnostique y las corrija es parte del ejercicio, asi que
+# la automatizacion no lo hace por el.
+#
+# Por eso las tareas NO llevan ninguna etiqueta que permita saltarlas con
+# --skip-tags, y no hay ningun bloque ni variable para revertirlas.
+# ---------------------------------------------------------------------------
+
+- name: Preparacion del escenario
+  when: deploy_scenario == 'p3.5-flask-debug'
+  block:
+
+    # =================================================================
+    # (a) Propietarios del socket Unix
+    #
+    # Se cambian los propietarios del socket ya creado, sin tocar la
+    # unidad de servicio. El socket pasa a pertenecer al usuario "ubuntu",
+    # del que el usuario de Nginx no forma parte, asi que no puede
+    # conectarse a el.
+    #
+    # OJO: la unidad de servicio se deja CORRECTA a proposito.
+    # =================================================================
+
+    - name: Cambiar los propietarios de los sockets
+      ansible.builtin.file:
+        path: "{{ item.socket }}"
+        owner: "{{ debug_socket_owner }}"
+        group: "{{ debug_socket_group }}"
+        state: file
+      become: true
+      loop: "{{ flask_apps }}"
+      loop_control:
+        label: "{{ item.socket }}"
+
+    # =================================================================
+    # (b) proxy_params en los virtual hosts
+    #
+    # Se anade la directiva "include proxy_params;" al bloque location /
+    # de cada virtual host. En Debian y Ubuntu, /etc/nginx/proxy_params ya
+    # define la cabecera Host, asi que Nginx acabaria enviando dos.
+    # =================================================================
+
+    - name: Anadir la directiva include proxy_params a los virtual hosts
+      ansible.builtin.lineinfile:
+        path: "{{ debug_nginx_config_dir }}/{{ item.name }}"
+        line: "        include proxy_params;"
+        insertbefore: "^        proxy_pass "
+        state: present
+      become: true
+      loop: "{{ flask_apps }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Recargar NGINX
+      ansible.builtin.systemd:
+        name: "{{ nginx_package }}"
+        state: reloaded
+      become: true
+
+    # =================================================================
+    # Informacion del estado resultante.
+    #
+    # Estas tareas se ejecutan DESPUES de preparar el escenario, asi que
+    # muestran el estado real en el que se queda. Solo informan: no
+    # interpretan el resultado ni sugieren la causa.
+    # =================================================================
+
+    - name: Verificar los permisos del socket de cada aplicacion
+      ansible.builtin.include_tasks: verify_socket.yml
+      loop: "{{ flask_apps }}"
+      loop_control:
+        loop_var: app
+        label: "{{ app.socket }}"
+
+    - name: Probar el socket de cada aplicacion como el usuario {{ nginx_user }}
+      ansible.builtin.include_tasks: verify_socket_curl.yml
+      loop: "{{ flask_apps }}"
+      loop_control:
+        loop_var: app
+        label: "{{ app.socket }}"
+
+    - name: Mostrar el estado del escenario
+      ansible.builtin.debug:
+        msg:
+          - "ESCENARIO p3.5-flask-debug ACTIVADO"
+          - "Servicios: {{ flask_apps | map(attribute='service') | join(', ') }}"
+          - ""
+          - "Comprueba las dos aplicaciones:"
+          - "  curl -i -H 'Host: flask-app.local' http://127.0.0.1/"
+          - "  curl -i -H 'Host: atletismo.local' http://127.0.0.1/"

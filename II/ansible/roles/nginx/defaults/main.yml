@@ -1,0 +1,8 @@
+---
+# ---------------------------------------------------------------------------
+# Valores por defecto del rol nginx
+# ---------------------------------------------------------------------------
+
+nginx_package: nginx
+nginx_config_dir: /etc/nginx/sites-available
+nginx_enabled_dir: /etc/nginx/sites-enabled
