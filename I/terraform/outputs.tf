@@ -61,15 +61,6 @@ output "fpm_fastcgi_rule_id" {
   value       = aws_vpc_security_group_ingress_rule.fpm_fastcgi.security_group_rule_id
 }
 
-output "fpm_fastcgi_port" {
-  description = "Puerto destino de la regla FastCGI del SG de PHP-FPM"
-  value       = var.fpm_fastcgi_port
-}
-
-output "fpm_fastcgi_correct_port" {
-  description = "Puerto en el que realmente escucha PHP-FPM"
-  value       = var.fpm_fastcgi_correct_port
-}
 
 output "fpm_fastcgi_backend_port" {
   description = "Puerto al que apunta el fastcgi_pass del NGINX"

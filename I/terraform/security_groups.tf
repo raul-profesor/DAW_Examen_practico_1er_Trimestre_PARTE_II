@@ -70,7 +70,7 @@ resource "aws_security_group" "fpm" {
 
 # ---------------------------------------------------------------------------
 # Regla FastCGI: el SG de PHP-FPM admite TODO el trafico TCP al puerto
-# {{ var.fpm_fastcgi_port }} (9000) que venga del SG de la maquina de
+# {{ var.fpm_fastcgi_port }} que venga del SG de la maquina de
 # NGINX (el proxy). No se restringe por IP: el origen es el propio SG.
 #
 # Se usa el recurso "aws_vpc_security_group_ingress_rule" (y no el legacy

@@ -18,7 +18,17 @@
 - name: Preparacion comun (todas las maquinas)
   hosts: all
   become: true
-  gather_facts: true
+  gather_facts: false
+  pre_tasks:
+    - name: Esperar a que SSH y Python esten disponibles
+      ansible.builtin.wait_for_connection:
+        timeout: 900
+        connect_timeout: 10
+        sleep: 10
+      become: false
+
+    - name: Recopilar facts
+      ansible.builtin.setup:
   roles:
     - role: common
       tags: [common, always]
@@ -64,11 +74,11 @@
       failed_when: false
       changed_when: false
 
-    - name: Mostrar el resultado de la verificacion
-      ansible.builtin.debug:
-        msg: >-
-          HTTP {{ site_check.status | default('sin respuesta') }}
-          - {% if site_check.status | default(0) == 200 %}despliegue correcto{% elif site_check.status | default(0) == 502 %}error 502: revisa la comunicacion entre NGINX y PHP-FPM{% elif site_check.status | default(0) == 404 %}error 404: revisa que el codigo este desplegado en la maquina de PHP-FPM{% else %}sin respuesta: revisa que los servicios esten activos{% endif %}
+    # - name: Mostrar el resultado de la verificacion
+    #   ansible.builtin.debug:
+    #     msg: >-
+    #       HTTP {{ site_check.status | default('sin respuesta') }}
+    #       - {% if site_check.status | default(0) == 200 %}despliegue correcto{% elif site_check.status | default(0) == 502 %}error 502: revisa la comunicacion entre NGINX y PHP-FPM{% elif site_check.status | default(0) == 404 %}error 404: revisa que el codigo este desplegado en la maquina de PHP-FPM{% else %}sin respuesta: revisa que los servicios esten activos{% endif %}
 
 # ---------------------------------------------------------------------------
 # Preparacion final del escenario.

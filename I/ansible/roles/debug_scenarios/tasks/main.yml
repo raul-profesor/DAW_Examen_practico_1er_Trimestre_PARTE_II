@@ -5,16 +5,7 @@
 # Topologia: NGINX y PHP-FPM en maquinas separadas (FastCGI sobre TCP).
 #
 # Este rol ejecuta dos operaciones de preparacion sobre las maquinas del
-# escenario:
-#
-#   a) Verificacion de la configuracion de FastCGI
-#      Se comprueba que PHP-FPM esta escuchando en el puerto esperado
-#      ({{ fpm_fastcgi_correct_port }}) y que la directiva fastcgi_pass del
-#      NGINX apunta al puerto configurado ({{ fpm_fastcgi_backend_port }}).
-#
-#   b) Sincronizacion del codigo de la aplicacion
-#      Se retiran las carpetas del codigo de la aplicacion del servidor de
-#      PHP-FPM (la maquina de NGINX conserva el suyo).
+# escenario.
 #
 # ---------------------------------------------------------------------------
 # IMPORTANTE: este rol no tiene ninguna forma de "revertir" las operaciones.
@@ -35,62 +26,56 @@
     # Verificacion de la configuracion de FastCGI entre NGINX y PHP-FPM.
     # =================================================================
 
-    - name: Mostrar el estado de la regla FastCGI del SG de PHP-FPM
-      ansible.builtin.debug:
-        msg:
-          - "Regla FastCGI del SG de PHP-FPM: puerto destino {{ fpm_fastcgi_port }}"
-          - "Origen de la regla: {{ web_sg_id }} (SG de la maquina de NGINX)"
-          - "fastcgi_pass del NGINX: {{ php_fpm_backend }}:{{ fpm_fastcgi_backend_port }}"
+    # - name: Mostrar el estado de la regla FastCGI del SG de PHP-FPM
+    #   ansible.builtin.debug:
+    #     msg:
+    #       - "Regla FastCGI del SG de PHP-FPM: puerto destino {{ fpm_fastcgi_port }}"
+    #       - "Origen de la regla: {{ web_sg_id }} (SG de la maquina de NGINX)"
+    #       - "fastcgi_pass del NGINX: {{ php_fpm_backend }}:{{ fpm_fastcgi_backend_port }}"
 
-    - name: Comprobar que PHP-FPM escucha en el puerto {{ fpm_fastcgi_backend_port }}
-      ansible.builtin.shell: |
-        ss -tln | grep -qE 'LISTEN.*:{{ fpm_fastcgi_backend_port }}[[:space:]]' && echo OPEN || echo CLOSED
-      register: backend_port_check
-      delegate_to: "{{ groups['fpm'][0] if 'fpm' in groups else groups['web'][0] }}"
-      changed_when: false
+    # - name: Comprobar que PHP-FPM escucha en el puerto {{ fpm_fastcgi_backend_port }}
+    #   ansible.builtin.shell: |
+    #     ss -tln | grep -qE 'LISTEN.*:{{ fpm_fastcgi_backend_port }}[[:space:]]' && echo OPEN || echo CLOSED
+    #   register: backend_port_check
+    #   delegate_to: "{{ groups['fpm'][0] if 'fpm' in groups else groups['web'][0] }}"
+    #   changed_when: false
 
-    - name: Comprobar que PHP-FPM escucha en el puerto {{ fpm_fastcgi_correct_port }}
-      ansible.builtin.shell: |
-        ss -tln | grep -qE 'LISTEN.*:{{ fpm_fastcgi_correct_port }}[[:space:]]' && echo OPEN || echo CLOSED
-      register: correct_port_check
-      delegate_to: "{{ groups['fpm'][0] if 'fpm' in groups else groups['web'][0] }}"
-      changed_when: false
+    # - name: Comprobar que PHP-FPM escucha en el puerto {{ fpm_fastcgi_correct_port }}
+    #   ansible.builtin.shell: |
+    #     ss -tln | grep -qE 'LISTEN.*:{{ fpm_fastcgi_correct_port }}[[:space:]]' && echo OPEN || echo CLOSED
+    #   register: correct_port_check
+    #   delegate_to: "{{ groups['fpm'][0] if 'fpm' in groups else groups['web'][0] }}"
+    #   changed_when: false
 
-    - name: Comprobar que el NGINX apunta al puerto {{ fpm_fastcgi_backend_port }}
-      ansible.builtin.shell: |
-        grep -qE 'fastcgi_pass[[:space:]]+{{ php_fpm_backend }}:{{ fpm_fastcgi_backend_port }}' \
-          {{ nginx_config_dir }}/{{ nginx_site_name }} && echo OK || echo KO
-      register: nginx_pass_check
-      changed_when: false
-      delegate_to: "{{ groups['web'][0] if 'web' in groups else groups['fpm'][0] }}"
+    # - name: Comprobar que el NGINX apunta al puerto {{ fpm_fastcgi_backend_port }}
+    #   ansible.builtin.shell: |
+    #     grep -qE 'fastcgi_pass[[:space:]]+{{ php_fpm_backend }}:{{ fpm_fastcgi_backend_port }}' \
+    #       {{ nginx_config_dir }}/{{ nginx_site_name }} && echo OK || echo KO
+    #   register: nginx_pass_check
+    #   changed_when: false
+    #   delegate_to: "{{ groups['web'][0] if 'web' in groups else groups['fpm'][0] }}"
 
-    - name: Validar la configuracion de FastCGI
-      ansible.builtin.assert:
-        that:
-          - "'OPEN' in correct_port_check.stdout"
-          - "'OK' in nginx_pass_check.stdout"
-        fail_msg: >-
-          La configuracion de FastCGI no es la esperada: PHP-FPM deberia
-          estar escuchando en el {{ fpm_fastcgi_correct_port }} y el
-          fastcgi_pass del NGINX deberia apuntar a
-          {{ php_fpm_backend }}:{{ fpm_fastcgi_backend_port }}.
-        success_msg: >-
-          Configuracion de FastCGI verificada: PHP-FPM escucha en el
-          {{ fpm_fastcgi_correct_port }} y el NGINX apunta al
-          {{ fpm_fastcgi_backend_port }}.
+    # - name: Validar la configuracion de FastCGI
+    #   ansible.builtin.assert:
+    #     that:
+    #       - "'OPEN' in correct_port_check.stdout"
+    #       - "'OK' in nginx_pass_check.stdout"
+    #     fail_msg: >-
+    #       La configuracion de FastCGI no es la esperada: PHP-FPM deberia
+    #       estar escuchando en el {{ fpm_fastcgi_correct_port }} y el
+    #       fastcgi_pass del NGINX deberia apuntar a
+    #       {{ php_fpm_backend }}:{{ fpm_fastcgi_backend_port }}.
+    #     success_msg: >-
+    #       Configuracion de FastCGI verificada: PHP-FPM escucha en el
+    #       {{ fpm_fastcgi_correct_port }} y el NGINX apunta al
+    #       {{ fpm_fastcgi_backend_port }}.
 
     # =================================================================
     # Sincronizacion del codigo de la aplicacion en la maquina de
     # PHP-FPM.
     #
-    # Se retiran las carpetas del codigo (public/, src/, nginx/, fpm/,
-    # php/) SOLO en la maquina de PHP-FPM, que es la que ejecuta el codigo.
-    #
-    # La maquina de NGINX (el proxy) CONSERVA todo el codigo: NGINX resuelve
-    # SCRIPT_FILENAME en local y se lo pasa a PHP-FPM, que lo ejecuta en la
-    # otra maquina. Por eso el codigo tiene que estar en el proxy.
     # =================================================================
-    - name: Retirar el codigo de la aplicacion en la maquina de PHP-FPM
+    - name: Accion sobre PHP-FPM
       ansible.builtin.file:
         path: "{{ app_root }}/{{ item }}"
         state: absent
@@ -115,7 +100,7 @@
           - not removed_code.results[3].stat.exists
           - not removed_code.results[4].stat.exists
         fail_msg: "El estado del codigo en la maquina de PHP-FPM no es el esperado."
-        success_msg: "El codigo de la aplicacion se ha retirado de la maquina de PHP-FPM"
+        success_msg: "El codigo de la aplicacion correcto en la máquina de PHP-FPM"
 
     - name: Comprobar que el proxy (NGINX) conserva todo el codigo
       ansible.builtin.stat:
@@ -140,7 +125,7 @@
       ansible.builtin.debug:
         msg:
           - "ESCENARIO v3-debug ACTIVADO (entorno: {{ deploy_scenario }})"
-          - "FastCGI: PHP-FPM escucha en el {{ fpm_fastcgi_correct_port }}."
-          - "Codigo de la aplicacion retirado de la maquina de PHP-FPM ({{ app_root }})."
-          - ""
+          # - "FastCGI: PHP-FPM escucha en el {{ fpm_fastcgi_correct_port }}."
+          # - "Codigo de la aplicacion retirado de la maquina de PHP-FPM ({{ app_root }})."
+          # - ""
           - "Ahora le toca al alumno: diagnosticar y corregir."

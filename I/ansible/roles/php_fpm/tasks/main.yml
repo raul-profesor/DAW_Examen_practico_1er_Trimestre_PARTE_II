@@ -20,7 +20,7 @@
 
 - name: Mostrar la version de PHP detectada
   ansible.builtin.debug:
-    msg: "PHP-FPM {{ php_version_installed }} (version esperada en la configuracion: {{ php_version }})"
+    msg: "PHP-FPM {{ php_version_installed }}"
 
 - name: Comprobar que el servicio PHP-FPM esta activo
   ansible.builtin.systemd:
@@ -44,7 +44,7 @@
 # El rol nginx solo se aplica a la maquina "web", pero en esta maquina
 # NGINX tambien esta instalado (lo instala el rol php_fpm). Aqui se
 # despliega el virtual host con la directiva fastcgi_pass apuntando al
-# puerto en el que realmente escucha PHP-FPM (9000).
+# puerto.
 #
 # Ojo: este fichero NO se activa (no se crea el enlace en sites-enabled),
 # porque en esta maquina no tiene que servir nada: el trafico entra por la
